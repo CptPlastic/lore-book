@@ -10,6 +10,7 @@ jobs:
     environment: pypi
     permissions:
       id-token: write  # required for trusted publishing
+      contents: read   # required to checkout private repo
 
     steps:
       - uses: actions/checkout@v4
