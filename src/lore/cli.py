@@ -12,6 +12,8 @@ from rich.text import Text
 from rich.panel import Panel
 from rich import box
 
+from . import __version__
+
 # ---------------------------------------------------------------------------
 # Palette (mirrors tui.py so help screen feels consistent)
 # ---------------------------------------------------------------------------
@@ -22,7 +24,7 @@ _AD = "#996600"   # dim amber
 _BG = "#080c08"
 _BD = "#1a6606"   # border
 
-_BANNER_TEXT = f"[bold {_A}]L · O · R · E   -   AI  PROJECT  MEMORY[/bold {_A}]"
+_BANNER_TEXT = f"[bold {_A}]L · O · R · E   -   AI  PROJECT  MEMORY[/bold {_A}]  [dim]v{__version__}[/dim]"
 
 # Force truecolor so VS Code's integrated terminal and other 256-color
 # terminals don't degrade hex palette colors to ugly approximations.
@@ -45,6 +47,39 @@ app.add_typer(hook_app,  name="hook")
 app.add_typer(index_app, name="index")
 app.add_typer(relic_app, name="relic")
 
+
+# ---------------------------------------------------------------------------
+# lore version
+# ---------------------------------------------------------------------------
+
+@app.command()
+def version(
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="Check PyPI for the latest available version"),
+    ] = False,
+) -> None:
+    """Show the current lore version and optionally check for updates."""
+    console.print(f"lore [bold]{__version__}[/bold]")
+    if check:
+        try:
+            import urllib.request
+            import json as _json
+            url = "https://pypi.org/pypi/lore-book/json"
+            with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
+                data = _json.loads(resp.read())
+            latest = data["info"]["version"]
+            if latest == __version__:
+                console.print(f"[dim]You are up to date.[/dim]")
+            else:
+                console.print(
+                    f"[bold {_A}]A new version is available:[/bold {_A}] [bold]{latest}[/bold]  "
+                    f"[dim](you have {__version__})[/dim]\n"
+                    f"  [dim]Run: [bold]pip3 install --upgrade lore-book[/bold][/dim]"
+                )
+        except Exception:
+            console.print(f"[dim]Could not reach PyPI to check for updates.[/dim]")
+
 console     = Console(color_system=_color_system, force_terminal=_force_color)
 err_console = Console(stderr=True, color_system=_color_system, force_terminal=_force_color)
 
@@ -65,6 +100,7 @@ def _root(ctx: typer.Context) -> None:
     t.add_column("DESCRIPTION", style=f"{_P}")
 
     rows = [
+        ("version",        "[--check]",               "Show version; --check queries PyPI for updates"),
         ("onboard",       "",                        "📜  New here? Start the guided chronicle setup"),
         ("init",          "\\[path]",                  "Create a .lore store in a directory"),
         ("add",           "\\[category] \\[content]",  "Store a new memory entry (interactive if no args)"),
