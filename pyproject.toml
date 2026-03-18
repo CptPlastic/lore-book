@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lore-book"
+version = "0.1.0"
+description = "The spellbook for your codebase — chronicle decisions, lore, and context your AI companions can actually read."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "numpy>=1.26",
+    "gitpython>=3.1",
+    "rich>=13.0",
+    "textual>=0.75",
+    "watchdog>=4.0",
+]
+
+[project.optional-dependencies]
+# Full semantic search (installs PyTorch + sentence-transformers, ~200-400MB)
+semantic = [
+    "sentence-transformers>=3.0",
+]
+# Everything
+all = [
+    "lore-book[semantic]",
+]
+
+[project.scripts]
+lore = "lore.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lore"]

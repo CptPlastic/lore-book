@@ -1,0 +1,362 @@
+# 📜 lore
+
+> *The spellbook for your codebase — chronicle decisions, context, and lessons your AI companions can actually read.*
+
+**Lore** is a local AI memory system for software projects. It stores what you know as plain YAML alongside your code — then publishes that knowledge as instruction files that GitHub Copilot, Claude, Cursor, Codex, and other AI tools read automatically.
+
+No external database. No API keys. No cloud sync. Everything lives in `.lore/` next to your code.
+
+---
+
+## How it works
+
+AI coding tools are stateless — they don't remember why you chose PostgreSQL over SQLite, that the auth layer must never bypass JWT validation, or that the frontend team deprecated the v1 API six months ago. You end up re-explaining the same context in every session.
+
+Lore fixes that. You capture knowledge once; every AI session inherits it automatically.
+
+```
+Your decisions, facts, and lessons
+        ↓  lore add / lore relic
+  .lore/ (plain YAML)
+        ↓  lore export
+  copilot-instructions.md · AGENTS.md · CLAUDE.md · .cursor/rules/memory.md
+        ↓
+  Every AI tool reads your repo context — without you repeating yourself
+```
+
+---
+
+## Core concepts
+
+### Spell *(memory)*
+
+A single piece of knowledge: a decision, a fact, a hard-won lesson. Short, specific, retrievable by semantic search.
+
+```sh
+lore add decisions "Use PostgreSQL — we need JSONB and row-level locking"
+lore add facts     "Auth service is the sole issuer of JWTs — never bypass it"
+lore add preferences "Prefer explicit over clever — this codebase has many contributors"
+```
+
+### Tome *(category)*
+
+A named collection of spells. Default tomes: **decisions, facts, preferences, summaries**. You can add your own in `.lore/config.yaml`.
+
+Tomes are just directory names — each spell is one YAML file filed under its tome.
+
+### Relic
+
+A raw artifact saved as-is for later processing. Use a relic when things are moving fast and you don't have time to curate.
+
+> Capture a relic now → distill spells from it later.
+
+A relic can be anything: a pasted session log, a git diff, a doc excerpt from Confluence, a long Slack thread. It lands in `.lore/relics/` untouched. When you have time, you open it with `lore relic distill` and choose exactly which parts become proper spells.
+
+### Export *(the chronicle)*
+
+`lore export` writes all your spells into the files AI tools pick up automatically:
+
+| File | Tool |
+|---|---|
+| `.github/copilot-instructions.md` | GitHub Copilot |
+| `AGENTS.md` | OpenAI Codex, agent frameworks |
+| `CLAUDE.md` | Anthropic Claude |
+| `.cursor/rules/memory.md` | Cursor |
+
+Each file gets a security preamble first (if configured), then all your spells, grouped by tome. Exports are atomic — a crash mid-write never leaves a partial file.
+
+---
+
+## Install
+
+```sh
+pip install lore-book
+```
+
+For local development:
+
+```sh
+pip install -e .
+```
+
+**Requirements:** Python 3.10+. Semantic search uses `sentence-transformers` (downloaded once, ~80 MB). If the model is unavailable, a TF-IDF fallback kicks in automatically — no configuration needed.
+
+---
+
+## Quick start
+
+```sh
+lore onboard
+```
+
+The onboarding command explains every concept, walks you through store setup, security policy, your first spell, and publishing — with an interactive step-by-step flow. Start here if you're new.
+
+---
+
+## Spells — adding and searching memories
+
+```sh
+# Interactive, step-by-step
+lore add
+
+# One-liner (scriptable, CI-friendly)
+lore add decisions "Use FastAPI — async support + automatic OpenAPI docs"
+lore add preferences "Always use type hints" --tags style,python
+lore add facts "Minimum supported Python is 3.10"
+
+# Semantic search — finds conceptually related spells, not just keyword matches
+lore search "why did we choose FastAPI"
+lore search "authentication strategy"
+
+# List all spells
+lore list
+
+# List by tome
+lore list decisions
+
+# Delete a spell
+lore remove <id>
+```
+
+Spell IDs are short UUID prefixes. `lore list` shows them.
+
+---
+
+## Relics — capture now, curate later
+
+Use relics when you want to preserve raw information without slowing down to decide what matters.
+
+```sh
+# Paste session notes interactively (enter . to finish)
+lore relic capture
+
+# Pull in a file — meeting notes, spec doc, wiki export
+lore relic capture --file session-notes.md --title "Auth redesign session"
+
+# Snapshot the current working-tree + staged diff
+lore relic capture --git-diff --title "Pre-deploy changes"
+
+# Capture the last N commits (messages + diffs)
+lore relic capture --git-log 5 --title "Sprint 12 wrap-up"
+
+# Read from clipboard (macOS: pbpaste, Linux: xclip)
+lore relic capture --clipboard --title "Slack thread on rate limiting"
+
+# Pipe anything in
+git log --oneline -20 | lore relic capture --stdin --title "Recent commit history"
+cat confluence-export.txt | lore relic capture --stdin --title "Architecture decision"
+
+# Browse relics (shows preview of content)
+lore relic list
+
+# Read one in full
+lore relic view a3f1b2c4
+
+# Distill the good parts into spells
+lore relic distill a3f1b2c4
+
+# Delete a relic
+lore relic remove a3f1b2c4
+```
+
+### Distilling
+
+`lore relic distill` shows you the relic content and walks you through extracting spells one at a time:
+
+```
+  ─── Spell #1 ────────────────────────────────────────────
+  ✦ Inscription  the wisdom to enshrine  (. to seal the book): We chose CQRS to
+    separate read and write models after hitting contention on the orders table
+  ✦ Tome         which grimoire? [decisions]:
+  ✓  Spell a1b2c3d4 sealed into decisions.
+
+  ─── Spell #2 ────────────────────────────────────────────
+  ...
+```
+
+Each spell links back to its source relic. The tome selection is sticky — after you choose `decisions` for spell #1, it defaults to `decisions` for spell #2. Enter `.` to finish.
+
+---
+
+## Exporting AI context files
+
+```sh
+# Write all AI context files
+lore export
+
+# Write one target only
+lore export --format copilot
+lore export --format agents
+lore export --format claude
+lore export --format cursor
+```
+
+Exports are regenerated every run and are safe to commit. The git hook can automate this on every commit (see below).
+
+---
+
+## Git integration
+
+### Post-commit hook
+
+`lore hook install` opens an interactive wizard that installs a `.git/hooks/post-commit` script:
+
+```sh
+lore hook install
+```
+
+The wizard asks whether you want:
+- **Auto-extract** — scan each new commit message for decisions and facts, store them automatically
+- **Auto-export** — regenerate all AI context files after every commit so they're always current
+
+The generated hook is clearly marked `# Installed by lore`. Remove it safely with:
+
+```sh
+lore hook uninstall
+```
+
+### Extracting from past commits
+
+```sh
+# Extract from the last 20 commits
+lore extract --last 20
+```
+
+Lore scans commit messages for structured knowledge and adds it to your store.
+
+---
+
+## Security guidelines
+
+`lore security` configures a security preamble injected at the top of every export. This ensures every AI tool that reads your repo context also receives your security constraints before anything else.
+
+```sh
+lore security
+```
+
+The preamble can include:
+
+- **OWASP Top 10** reference (prevents the classics: injection, broken auth, SSRF, etc.)
+- **Security policy file** link (e.g. `SECURITY.md`)
+- **CODEOWNERS** notice — warns that sensitive paths need human review
+- **Custom rules** — any project-specific edicts ("Never disable SSL verification", "All secrets via env vars", etc.)
+
+This is especially useful in GitHub Enterprise environments where Copilot should always be reminded of your security posture before providing suggestions.
+
+---
+
+## Store layout
+
+```
+.lore/
+  config.yaml            ← store settings, categories, model config, security
+  decisions/             ← why things were built a certain way
+  facts/                 ← project context, constraints, team conventions
+  preferences/           ← coding style, tooling choices
+  summaries/             ← AI session summaries, sprint recaps
+  relics/                ← raw captured artifacts (sessions, diffs, docs)
+  embeddings/
+    index.json           ← local semantic search index (no external DB)
+```
+
+Each spell and relic is a plain YAML file. No database engine, no lock files, no proprietary format. You can read, edit, and commit them directly.
+
+`.lore/` is automatically added to `.gitignore` on `lore init` — your memories stay local unless you explicitly opt in to committing them.
+
+---
+
+## TUI
+
+```sh
+lore ui
+```
+
+A retro phosphor-green terminal browser for searching, reading, adding, and exporting memories. Live-reloads whenever `.lore/` files change on disk — open it in a split pane while you work.
+
+---
+
+## Background daemon
+
+```sh
+# Start watching — auto-exports on every .lore change
+lore awaken
+
+# Run in background
+lore awaken --background
+
+# Stop the daemon
+lore slumber
+```
+
+The daemon watches `.lore/` with filesystem events and regenerates all export files the moment any spell or config changes. Zero-friction — add a spell, your AI tools get it immediately.
+
+---
+
+## Health check
+
+```sh
+lore doctor
+```
+
+Reports:
+- Whether the `.lore/` store exists and is readable
+- Which semantic search mode is active (embedding model or TF-IDF fallback)
+- Whether the configured model endpoint is reachable
+- Counts of spells by tome and relics
+
+---
+
+## Corporate proxy / Artifactory
+
+If you're behind a ZScaler proxy or using an internal HuggingFace mirror:
+
+```sh
+lore config model_endpoint https://artifactory.example.com/artifactory/api/huggingfaceml/huggingface
+lore config model_ssl_verify false   # only if SSL inspection breaks certificate validation
+```
+
+Run `lore doctor` to confirm the model downloads and loads from your endpoint.
+
+---
+
+## Command reference
+
+| Command | Args / Flags | What it does |
+|---|---|---|
+| `onboard` | | Guided setup — concepts, store, security, first spell, export |
+| `init` | `[path]` | Create a `.lore/` store in a directory |
+| `add` | `[category] [content]` | Store a spell (interactive if no args) |
+| `list` | `[category]` | List spells, optionally filtered by tome |
+| `search` | `<query>` | Semantic search across all spells |
+| `remove` | `<id>` | Delete a spell |
+| `extract` | `[--last N]` | Pull spells from git commit messages |
+| `export` | `[--format F]` | Write AI context files |
+| `config` | `<key> <value>` | Set a config value |
+| `security` | | Configure the security preamble for exports |
+| `doctor` | | Store + model health report |
+| `hook install` | | Install git post-commit hook (wizard) |
+| `hook uninstall` | | Safely remove the lore-managed git hook |
+| `index rebuild` | | Rebuild the semantic search index from scratch |
+| `ui` | | Open the interactive terminal browser |
+| `awaken` | `[--background]` | Watch `.lore/` and auto-export on change |
+| `slumber` | | Stop the background daemon |
+| `relic capture` | `[--file F] [--git-diff] [--git-log N] [--clipboard] [--stdin] [--title T] [--tags T]` | Capture a raw artifact |
+| `relic list` | | List relics with content preview |
+| `relic distill` | `<id>` | Extract spells from a relic interactively |
+| `relic view` | `<id>` | View full relic content |
+| `relic remove` | `<id>` | Permanently delete a relic |
+
+Run `lore <command> --help` for detailed options on any command.
+
+---
+
+## Dependencies
+
+| Package | Purpose |
+|---|---|
+| `sentence-transformers` | Local semantic embeddings via `all-MiniLM-L6-v2` |
+| `gitpython` | Git history extraction |
+| `typer` + `rich` | CLI and terminal output |
+| `textual` | Interactive TUI |
+| `watchdog` | Live reload in TUI + background daemon |
+| `pyyaml` + `numpy` | YAML storage and vector math |

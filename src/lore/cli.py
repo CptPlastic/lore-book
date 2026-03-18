@@ -1,0 +1,1688 @@
+"""CLI entry point for lore."""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Annotated, Optional
+
+import typer
+from rich.console import Console
+from rich.table import Table
+from rich.text import Text
+from rich.panel import Panel
+from rich import box
+
+# ---------------------------------------------------------------------------
+# Palette (mirrors tui.py so help screen feels consistent)
+# ---------------------------------------------------------------------------
+_P  = "#39ff14"   # phosphor green
+_PD = "#1a7a0a"   # dim green
+_A  = "#ffaa00"   # amber
+_AD = "#996600"   # dim amber
+_BG = "#080c08"
+_BD = "#1a6606"   # border
+
+_BANNER_TEXT = f"[bold {_A}]L · O · R · E   -   AI  PROJECT  MEMORY[/bold {_A}]"
+
+# Force truecolor so VS Code's integrated terminal and other 256-color
+# terminals don't degrade hex palette colors to ugly approximations.
+# LORE_NO_COLOR=1 lets users opt out (e.g. for plain CI logs).
+_force_color  = os.environ.get("LORE_NO_COLOR", "") == ""
+_color_system = "truecolor" if _force_color else None
+if _force_color and not os.environ.get("COLORTERM"):
+    os.environ["COLORTERM"] = "truecolor"
+
+app = typer.Typer(
+    name="lore",
+    help="AI memory manager for local repos and projects.",
+    no_args_is_help=False,
+    invoke_without_command=True,
+)
+hook_app  = typer.Typer(help="Manage git hooks.")
+index_app = typer.Typer(help="Manage the embedding index.")
+relic_app = typer.Typer(help="Capture and manage relics - rich session artifacts.")
+app.add_typer(hook_app,  name="hook")
+app.add_typer(index_app, name="index")
+app.add_typer(relic_app, name="relic")
+
+console     = Console(color_system=_color_system, force_terminal=_force_color)
+err_console = Console(stderr=True, color_system=_color_system, force_terminal=_force_color)
+
+
+@app.callback(invoke_without_command=True)
+def _root(ctx: typer.Context) -> None:
+    """Show help when lore is run with no subcommand."""
+    if ctx.invoked_subcommand is not None:
+        return
+    console.print()
+    console.print(f"  {_BANNER_TEXT}")
+    console.print()
+
+    t = Table(box=box.SIMPLE, show_header=True, header_style=f"bold {_A}",
+              show_edge=False, padding=(0, 1), expand=False)
+    t.add_column("COMMAND",     style=f"bold {_P}", no_wrap=True, min_width=14)
+    t.add_column("ARGS",        style=_PD,          no_wrap=True, min_width=22)
+    t.add_column("DESCRIPTION", style=f"{_P}")
+
+    rows = [
+        ("onboard",       "",                        "📜  New here? Start the guided chronicle setup"),
+        ("init",          "\\[path]",                  "Create a .lore store in a directory"),
+        ("add",           "\\[category] \\[content]",  "Store a new memory entry (interactive if no args)"),
+        ("list",          "\\[category]",              "List memories, optionally filtered by category"),
+        ("search",        "<query>",                 "Semantic search across all memories"),
+        ("remove",        "<id>",                    "Delete a memory by its ID"),
+        ("extract",       "\\[--last N]",              "Pull memories from recent git commits"),
+        ("export",        "\\[--format]",              "Write AI context files (AGENTS.md, copilot, cursor, claude)"),
+        ("config",        "<key> <value>",           "Set a config value (model_endpoint, ssl_verify, …)"),
+        ("security",      "",                        "Configure security guidelines for AI context exports"),
+        ("doctor",        "",                        "Check store, model, and search mode status"),
+        ("hook install",    "",                        "Install a post-commit git hook to auto-extract memories"),
+        ("hook uninstall",  "",                        "Remove the lore-managed post-commit hook"),
+        ("index rebuild",   "",                        "Rebuild the semantic search index from scratch"),
+        ("ui",            "",                        "Open the interactive terminal UI"),
+        ("awaken",        "[--background]",          "👁  Watch .lore and auto-export on every change"),
+        ("slumber",       "",                        "Banish the background spellbook daemon"),
+        ("relic capture", "[--file F] [--git-diff] [--git-log N] [--clipboard] [--stdin]",  "🏺  Capture a session, doc, or diff as a relic"),
+        ("relic list",    "",                        "List all relics in the spellbook"),
+        ("relic distill", "<id>",                    "Extract spells (memories) from a relic"),
+        ("relic view",    "<id>",                    "View the full content of a relic"),
+        ("relic remove",  "<id>",                    "Permanently destroy a relic"),
+    ]
+    for cmd, args, desc in rows:
+        t.add_row(cmd, args, desc)
+
+    console.print(t)
+    console.print(f"  [{_AD}]Run [bold]lore <command> --help[/bold] for detailed options.[/{_AD}]")
+    console.print()
+
+
+def _require_root() -> Path:
+    from .config import find_memory_root
+    root = find_memory_root()
+    if root is None:
+        err_console.print(
+            "[red]No .lore directory found. Run `lore init` first.[/red]"
+        )
+        raise typer.Exit(code=1)
+    return root
+
+
+# ---------------------------------------------------------------------------
+# mem init
+# ---------------------------------------------------------------------------
+
+@app.command()
+def init(
+    path: Annotated[
+        Path,
+        typer.Argument(help="Directory to initialize (default: current directory)"),
+    ] = Path("."),
+) -> None:
+    """Initialize a .lore store in the given directory."""
+    from .store import init_store
+    root = path.resolve()
+    init_store(root)
+    # Add .lore to .gitignore if inside a git repo
+    gitignore = root / ".gitignore"
+    entry = ".lore/"
+    if gitignore.exists():
+        lines = gitignore.read_text().splitlines()
+        if entry not in lines:
+            with gitignore.open("a") as f:
+                f.write(f"\n{entry}\n")
+            console.print(f"[dim]Added {entry} to .gitignore[/dim]")
+    else:
+        gitignore.write_text(f"{entry}\n")
+        console.print(f"[dim]Created .gitignore with {entry}[/dim]")
+    console.print(f"[green]Initialized lore store at[/green] {root / '.lore'}")
+    console.print()
+    console.print(
+        Panel(
+            f"[bold]The [bold {_P}].lore/[/bold {_P}] directory is your project memory.[/bold]\n"
+            "Everything you [bold]add[/bold], [bold]extract[/bold], or [bold]import[/bold] lives here as plain YAML — "
+            "readable, diffable, and fully yours.\n\n"
+            f"[dim]It is already excluded from git. Run [bold]lore add[/bold] to store your first memory.[/dim]",
+            border_style=_BD,
+            padding=(0, 2),
+            style=f"on {_BG}",
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# lore onboard
+# ---------------------------------------------------------------------------
+
+_RPG_PAUSE = 0.6   # seconds between story beats (0 = instant, nice for CI)
+
+@app.command()
+def onboard() -> None:
+    """Begin the lore onboarding quest — set up everything from scratch."""
+    import time
+    from pathlib import Path as _Path
+    from rich.prompt import Prompt, Confirm
+    from rich.rule import Rule
+    from .config import find_memory_root, load_config, save_config
+
+    def _beat(text: str, pause: float = _RPG_PAUSE) -> None:
+        console.print(text)
+        time.sleep(pause)
+
+    def _chapter(n: int, title: str) -> None:
+        console.print()
+        console.print(Rule(f"  [bold {_A}]Chapter {n}  {title}[/bold {_A}]  ", style=_BD))
+        console.print()
+        time.sleep(_RPG_PAUSE * 0.5)
+
+    # ── Prologue ─────────────────────────────────────────────────────────────
+    console.print()
+    console.print(Panel(
+        f"[bold {_A}]📜  L · O · R · E[/bold {_A}]\n"
+        f"[dim {_A}]An Onboarding Chronicle[/dim {_A}]",
+        border_style=_BD, padding=(1, 4), style=f"on {_BG}",
+    ))
+    console.print()
+    time.sleep(_RPG_PAUSE)
+
+    _beat(f"  [bold {_P}]In every great project, knowledge is earned - and forgotten.[/bold {_P}]")
+    _beat(f"  [dim]Decisions fade. Context is lost. The codebase grows opaque.[/dim]")
+    console.print()
+    _beat(f"  [bold {_A}]Lore[/bold {_A}] is your project's memory - a living chronicle that travels")
+    _beat(f"  with your code and speaks directly to your AI tools.")
+    console.print()
+    _beat(f"  [dim]This onboarding will guide you through the four rites of initiation:[/dim]")
+    _beat(f"  [dim]  I.   Forge the Store[/dim]", 0.2)
+    _beat(f"  [dim]  II.  Inscribe a Law  (security)[/dim]", 0.2)
+    _beat(f"  [dim]  III. Record a Memory[/dim]", 0.2)
+    _beat(f"  [dim]  IV.  Publish the Chronicle[/dim]", 0.2)
+    console.print()
+
+    # ── Concept primer ────────────────────────────────────────────────────────
+    time.sleep(_RPG_PAUSE * 0.5)
+    console.print(Panel(
+        f"[bold {_A}]  A Brief Lexicon[/bold {_A}]\n\n"
+        f"[bold {_P}]Spell[/bold {_P}] [dim](memory)[/dim]\n"
+        f"  A single piece of knowledge - a decision, a fact, a lesson learned.\n"
+        f"  Spells are the atoms of your chronicle. Each gets its own YAML entry.\n\n"
+        f"[bold {_P}]Tome[/bold {_P}] [dim](category)[/dim]\n"
+        f"  A named collection of spells: facts, decisions, preferences, summaries.\n"
+        f"  You choose the tomes; lore just files things into them.\n\n"
+        f"[bold {_P}]Relic[/bold {_P}]\n"
+        f"  A raw artifact - a session dump, a git diff, a pasted doc - saved\n"
+        f"  as-is. Later you distill a relic into spells, keeping only what matters.\n\n"
+        f"[bold {_P}]Export[/bold {_P}] [dim](the chronicle)[/dim]\n"
+        f"  lore writes your spells into files your AI tools read automatically:\n"
+        f"  [dim]copilot-instructions.md  AGENTS.md  CLAUDE.md  .cursor/rules/memory.md[/dim]\n"
+        f"  Every tool that reads your repo now shares your context, always in sync.",
+        border_style=_BD, padding=(0, 2), style=f"on {_BG}",
+    ))
+    console.print()
+    time.sleep(_RPG_PAUSE * 0.5)
+
+    if not Confirm.ask(f"  [bold {_P}]Are you ready to begin?[/bold {_P}]", default=True):
+        console.print(f"\n  [dim]The scroll remains sealed. Return when you are ready.[/dim]\n")
+        raise typer.Exit()
+
+    # ── Chapter I — Forge the Store ──────────────────────────────────────────
+    _chapter(1, "Forge the Store")
+    _beat(f"  [dim]Before memories can be kept, a sanctum must be prepared.[/dim]")
+    _beat(f"  [dim]The [bold {_P}].lore/[/bold {_P}] directory will hold every chronicle, decision,")
+    _beat(f"  [dim]and fact - as plain YAML, committed alongside your code.[/dim]")
+    console.print()
+
+    root = find_memory_root()
+    if root:
+        _beat(f"  [bold {_P}]✓[/bold {_P}]  A store already exists at [bold]{root / '.lore'}[/bold]")
+        _beat(f"  [dim]Your sanctum stands. We shall not disturb it.[/dim]")
+    else:
+        dest_str = Prompt.ask(
+            f"  [bold {_P}]Where shall the store be forged?[/bold {_P}] [dim](path)[/dim]",
+            default=".",
+        )
+        dest = _Path(dest_str).resolve()
+        console.print()
+        from .store import init_store
+        init_store(dest)
+        gitignore = dest / ".gitignore"
+        entry = ".lore/"
+        if gitignore.exists():
+            lines = gitignore.read_text().splitlines()
+            if entry not in lines:
+                with gitignore.open("a") as f:
+                    f.write(f"\n{entry}\n")
+        else:
+            gitignore.write_text(f"{entry}\n")
+        root = dest
+        _beat(f"  [bold {_P}]✓[/bold {_P}]  The sanctum has been forged at [bold]{root / '.lore'}[/bold]")
+        _beat(f"  [dim]The gates have been hidden from git's eye.[/dim]")
+
+    cfg = load_config(root)
+
+    # ── Chapter II — Inscribe a Law ──────────────────────────────────────────
+    _chapter(2, "Inscribe a Law")
+    _beat(f"  [dim]Every chronicle must be bound by covenant:[/dim]")
+    _beat(f"  [dim]rules that tell your AI what it must never do.[/dim]")
+    console.print()
+
+    sec = dict(cfg.get("security", {}))
+    already_set = sec.get("enabled", False)
+    if already_set:
+        _beat(f"  [bold {_P}]✓[/bold {_P}]  A security covenant is already inscribed.")
+        reconfigure = Confirm.ask(
+            f"  [bold {_P}]Re-configure it now?[/bold {_P}]", default=False
+        )
+    else:
+        reconfigure = True
+
+    if reconfigure:
+        _beat(f"  [dim]The standard covenant includes:[/dim]")
+        _beat(f"  [dim]  · No hardcoded credentials or disabled SSL[/dim]", 0.15)
+        _beat(f"  [dim]  · OWASP Top 10 prevention[/dim]", 0.15)
+        _beat(f"  [dim]  · Reference to SECURITY.md and CODEOWNERS[/dim]", 0.15)
+        console.print()
+
+        sec["enabled"] = Confirm.ask(
+            f"  [bold {_P}]Enable the security covenant?[/bold {_P}]", default=True
+        )
+        console.print()
+
+        if sec["enabled"]:
+            sec.setdefault("owasp_top10", True)
+            sec.setdefault("security_policy", "SECURITY.md")
+            sec.setdefault("codeowners", True)
+            sec.setdefault("custom_rules", [])
+
+            sec["owasp_top10"] = Confirm.ask(
+                f"  [bold {_P}]Include OWASP Top 10 reference?[/bold {_P}]",
+                default=sec["owasp_top10"],
+            )
+            policy = Prompt.ask(
+                f"  [bold {_P}]Security policy file[/bold {_P}] [dim](blank to skip)[/dim]",
+                default=sec["security_policy"] or "SECURITY.md",
+            )
+            sec["security_policy"] = policy.strip() or None
+            sec["codeowners"] = Confirm.ask(
+                f"  [bold {_P}]Reference CODEOWNERS?[/bold {_P}]",
+                default=sec["codeowners"],
+            )
+            console.print()
+            _beat(f"  [dim]Scribe any custom edicts (blank line to finish):[/dim]")
+            rules: list[str] = list(sec["custom_rules"])
+            while True:
+                r = Prompt.ask(f"  [bold {_P}]Edict[/bold {_P}] [dim](blank to finish)[/dim]", default="")
+                if not r.strip():
+                    break
+                rules.append(r.strip())
+            sec["custom_rules"] = rules
+
+        cfg["security"] = sec
+        save_config(root, cfg)
+        _beat(f"\n  [bold {_P}]✓[/bold {_P}]  The covenant has been inscribed in the config.")
+
+    # ── Chapter III — Record a Memory ────────────────────────────────────────
+    _chapter(3, "Record a Memory")
+    _beat(f"  [dim]A spell is one discrete piece of knowledge: a decision your team made,[/dim]")
+    _beat(f"  [dim]a gotcha you hit, a rule your AI should always follow.[/dim]")
+    _beat(f"  [dim]Spells are short, specific, and retrievable by semantic search.[/dim]")
+    _beat(f"  [dim](For long raw artifacts - session dumps, diffs, docs - use [bold {_P}]lore relic capture[/bold {_P}] instead.)[/dim]")
+    console.print()
+
+    from .store import add_memory, list_memories
+    from .search import index_memory
+
+    existing = list_memories(root)
+    if existing:
+        _beat(
+            f"  [bold {_P}]✓[/bold {_P}]  Your tome already holds "
+            f"[bold]{len(existing)}[/bold] entr{'y' if len(existing)==1 else 'ies'}."
+        )
+        add_one = Confirm.ask(
+            f"  [bold {_P}]Add another memory now?[/bold {_P}]", default=False
+        )
+    else:
+        add_one = True
+
+    if add_one:
+        valid_cats = cfg.get("categories", ["decisions", "facts", "preferences", "summaries"])
+        console.print()
+        console.print(f"  [dim]Available categories:[/dim] {', '.join(valid_cats)}")
+        console.print()
+        mem_cat = Prompt.ask(
+            f"  [bold {_P}]Category[/bold {_P}]",
+            default=valid_cats[0] if valid_cats else "facts",
+        )
+        console.print()
+        mem_content = Prompt.ask(f"  [bold {_P}]Memory[/bold {_P}]")
+        while not mem_content.strip():
+            console.print(f"  [bold red]The tome refuses an empty entry.[/bold red]")
+            mem_content = Prompt.ask(f"  [bold {_P}]Memory[/bold {_P}]")
+        mem_tags_raw = Prompt.ask(
+            f"  [bold {_P}]Tags[/bold {_P}] [dim](comma-separated, optional)[/dim]", default=""
+        )
+        mem_tags = [t.strip() for t in mem_tags_raw.split(",") if t.strip()]
+        console.print()
+        with console.status("  Indexing…"):
+            entry = add_memory(root, mem_cat, mem_content, tags=mem_tags)
+            index_memory(root, entry["id"], mem_content)
+        _beat(f"  [bold {_P}]✓[/bold {_P}]  Memory [bold]{entry['id']}[/bold] has been sealed in the tome.")
+
+    # ── Chapter IV — Publish the Chronicle ───────────────────────────────────
+    _chapter(4, "Publish the Chronicle")
+    _beat(f"  [dim]The final rite: transcribe the chronicle into the languages")
+    _beat(f"  [dim]your AI companions can read.[/dim]")
+    console.print()
+    _beat(f"  [dim]This writes:[/dim]")
+    _beat(f"  [dim]  · [bold].github/copilot-instructions.md[/bold]  - GitHub Copilot[/dim]", 0.15)
+    _beat(f"  [dim]  · [bold]AGENTS.md[/bold]                        - OpenAI Codex / agents[/dim]", 0.15)
+    _beat(f"  [dim]  · [bold]CLAUDE.md[/bold]                        - Anthropic Claude[/dim]", 0.15)
+    _beat(f"  [dim]  · [bold].cursor/rules/memory.md[/bold]          - Cursor[/dim]", 0.15)
+    console.print()
+
+    if Confirm.ask(f"  [bold {_P}]Publish the chronicle now?[/bold {_P}]", default=True):
+        from .export import export_all
+        console.print()
+        with console.status("  Transcribing…"):
+            paths = export_all(root)
+        for p in paths:
+            console.print(f"  [bold {_P}]✓[/bold {_P}]  {p.relative_to(root)}")
+
+    # ── Epilogue ──────────────────────────────────────────────────────────────
+    console.print()
+    console.print(Rule(style=_BD))
+    console.print()
+    time.sleep(_RPG_PAUSE)
+    _beat(f"  [bold {_P}]The chronicle is open. The rites are complete.[/bold {_P}]")
+    console.print()
+    _beat(f"  [dim]From this day forward, your memories travel with your code.[/dim]")
+    _beat(f"  [dim]Every AI that reads your repo will know what you know.[/dim]")
+    console.print()
+    _beat(f"  A few commands to guide your journey:")
+    console.print()
+    _beat(f"    [bold {_P}]lore add[/bold {_P}]                  [dim]Record a spell (interactive)[/dim]", 0.1)
+    _beat(f"    [bold {_P}]lore search <query>[/bold {_P}]       [dim]Find spells semantically[/dim]", 0.1)
+    _beat(f"    [bold {_P}]lore export[/bold {_P}]               [dim]Republish AI context files[/dim]", 0.1)
+    _beat(f"    [bold {_P}]lore relic capture --git-diff[/bold {_P}] [dim]Capture a raw artifact[/dim]", 0.1)
+    _beat(f"    [bold {_P}]lore relic distill <id>[/bold {_P}]  [dim]Extract spells from a relic[/dim]", 0.1)
+    _beat(f"    [bold {_P}]lore ui[/bold {_P}]                   [dim]Open the visual memory browser[/dim]", 0.1)
+    _beat(f"    [bold {_P}]lore doctor[/bold {_P}]               [dim]Diagnose the store and model[/dim]", 0.1)
+    console.print()
+    console.print(f"  [bold {_A}]May your context never be lost.[/bold {_A}]")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# mem add
+# ---------------------------------------------------------------------------
+
+@app.command()
+def add(
+    category: Annotated[
+        Optional[str],
+        typer.Argument(help="Category: decisions, facts, preferences, summaries"),
+    ] = None,
+    content: Annotated[
+        Optional[str],
+        typer.Argument(help="Memory content to store"),
+    ] = None,
+    tags: Annotated[
+        Optional[str],
+        typer.Option("--tags", "-t", help="Comma-separated tags"),
+    ] = None,
+) -> None:
+    """Add a new memory entry (interactive walkthrough when called with no args)."""
+    from .store import add_memory, load_config
+    from .search import index_memory
+    from rich.prompt import Prompt, Confirm
+
+    root = _require_root()
+
+    if category is None and content is None:
+        # ── Interactive walkthrough ─────────────────────────────────────────
+        console.print()
+        console.print(Panel(
+            f"[bold {_A}]New memory — let's walk through it step by step.[/bold {_A}]",
+            border_style=_BD, padding=(0, 2), style=f"on {_BG}",
+        ))
+        console.print()
+
+        # Step 1 — category
+        cfg = load_config(root)
+        valid_cats: list[str] = cfg.get("categories", [])
+        console.print(f"  [bold]Step 1 of 3  —  Category[/bold]")
+        console.print(f"  [dim]Available:[/dim] {', '.join(valid_cats)}")
+        console.print(f"  [dim](type a new name to create a custom category)[/dim]")
+        console.print()
+        category = Prompt.ask(
+            f"  [bold {_P}]Category[/bold {_P}]",
+            default=valid_cats[0] if valid_cats else "facts",
+        )
+        console.print()
+
+        # Step 2 — content
+        console.print(f"  [bold]Step 2 of 3  —  Content[/bold]")
+        console.print(f"  [dim]Describe the decision, fact, or thing you want to remember.[/dim]")
+        console.print()
+        content = Prompt.ask(f"  [bold {_P}]Memory[/bold {_P}]")
+        while not content.strip():
+            console.print(f"  [bold red]Content cannot be empty.[/bold red]")
+            content = Prompt.ask(f"  [bold {_P}]Memory[/bold {_P}]")
+        console.print()
+
+        # Step 3 — tags
+        console.print(f"  [bold]Step 3 of 3  —  Tags[/bold]  [dim](optional)[/dim]")
+        console.print(f"  [dim]Comma-separated keywords to make this easier to find later.[/dim]")
+        console.print()
+        tags_input = Prompt.ask(
+            f"  [bold {_P}]Tags[/bold {_P}]",
+            default="",
+        )
+        tags = tags_input if tags_input.strip() else None
+        console.print()
+
+        # Confirm
+        console.print(f"  [dim]───────────────────────────────[/dim]")
+        console.print(f"  [bold]Category :[/bold] {category}")
+        console.print(f"  [bold]Memory   :[/bold] {content}")
+        console.print(f"  [bold]Tags     :[/bold] {tags or '(none)'}")
+        console.print(f"  [dim]───────────────────────────────[/dim]")
+        console.print()
+        confirmed = Confirm.ask(f"  [bold {_P}]Save this memory?[/bold {_P}]", default=True)
+        if not confirmed:
+            console.print(f"\n  [dim]Cancelled — nothing was saved.[/dim]\n")
+            raise typer.Exit()
+        console.print()
+
+    tag_list = [t.strip() for t in tags.split(",")] if tags else []
+    with console.status("Indexing…"):
+        entry = add_memory(root, category, content, tags=tag_list)
+        index_memory(root, entry["id"], content)
+    console.print(
+        f"  [bold {_P}]✓[/bold {_P}]  Saved [bold]{entry['id']}[/bold] → [bold]{category}[/bold]"
+    )
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# mem list
+# ---------------------------------------------------------------------------
+
+@app.command("list")
+def list_cmd(
+    category: Annotated[
+        Optional[str],
+        typer.Argument(help="Filter by category (omit to show all)"),
+    ] = None,
+) -> None:
+    """List stored memories."""
+    from .store import list_memories
+
+    root = _require_root()
+    memories = list_memories(root, category)
+    if not memories:
+        console.print("[yellow]No memories found.[/yellow]")
+        return
+
+    table = Table(show_header=True, header_style="bold magenta", expand=True)
+    table.add_column("ID", style="dim", width=10, no_wrap=True)
+    table.add_column("Category", width=12, no_wrap=True)
+    table.add_column("Content", min_width=20, overflow="fold")
+    table.add_column("Tags", width=20, no_wrap=True)
+    table.add_column("Created", width=19, no_wrap=True)
+
+    for m in memories:
+        table.add_row(
+            m.get("id", ""),
+            m.get("category", ""),
+            m.get("content", ""),
+            ", ".join(m.get("tags", [])),
+            m.get("created_at", "")[:19],
+        )
+    console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# mem search
+# ---------------------------------------------------------------------------
+
+@app.command()
+def search(
+    query: Annotated[str, typer.Argument(help="Natural language search query")],
+    top: Annotated[
+        int,
+        typer.Option("--top", "-k", help="Number of results to return"),
+    ] = 5,
+) -> None:
+    """Semantic search over stored memories."""
+    from .search import search as do_search
+
+    root = _require_root()
+    with console.status("Searching…"):
+        results = do_search(root, query, top_k=top)
+
+    if not results:
+        console.print("[yellow]No results found.[/yellow]")
+        return
+
+    table = Table(show_header=True, header_style="bold blue", expand=True)
+    table.add_column("Score", width=7, no_wrap=True)
+    table.add_column("ID", style="dim", width=10, no_wrap=True)
+    table.add_column("Category", width=12, no_wrap=True)
+    table.add_column("Content", min_width=20, overflow="fold")
+
+    for r in results:
+        table.add_row(
+            f"{r.get('_score', 0):.3f}",
+            r.get("id", ""),
+            r.get("category", ""),
+            r.get("content", ""),
+        )
+    console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# mem remove
+# ---------------------------------------------------------------------------
+
+@app.command()
+def remove(
+    mem_id: Annotated[str, typer.Argument(help="Memory ID to remove")],
+) -> None:
+    """Remove a memory entry by ID."""
+    from .store import remove_memory
+    from .search import remove_from_index
+
+    root = _require_root()
+    deleted = remove_memory(root, mem_id)
+    if deleted:
+        remove_from_index(root, mem_id)
+        console.print(f"[green]Removed[/green] [bold]{mem_id}[/bold]")
+    else:
+        err_console.print(f"[red]Memory ID '{mem_id}' not found.[/red]")
+        raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# mem extract
+# ---------------------------------------------------------------------------
+
+@app.command()
+def extract(
+    last: Annotated[
+        int,
+        typer.Option("--last", "-n", help="Number of recent commits to scan"),
+    ] = 20,
+    auto: Annotated[
+        bool,
+        typer.Option("--auto", help="Save all candidates without prompting"),
+    ] = False,
+    do_export: Annotated[
+        bool,
+        typer.Option("--export", help="Also export AI context files after saving (avoids a second process startup)"),
+    ] = False,
+) -> None:
+    """Extract memory candidates from git commit history."""
+    from .extract import extract_from_git
+    from .store import add_memory
+    from .search import batch_index_memories
+
+    root = _require_root()
+    with console.status(f"Scanning last {last} commit(s)…"):
+        try:
+            candidates = extract_from_git(root, n_commits=last)
+        except RuntimeError as e:
+            err_console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=1)
+
+    if not candidates:
+        console.print("[yellow]No memory candidates found in commit history.[/yellow]")
+        if do_export:
+            from .export import export_all
+            export_all(root)
+        return
+
+    console.print(f"Found [bold]{len(candidates)}[/bold] candidate(s).\n")
+
+    to_index: list[tuple[str, str]] = []
+    saved = 0
+    for i, c in enumerate(candidates, 1):
+        console.print(
+            f"[bold]\\[{i}/{len(candidates)}][/bold] "
+            f"[cyan]\\[{c['category']}][/cyan] {c['content']}"
+        )
+        if not auto and not typer.confirm("  Save this memory?", default=True):
+            continue
+        entry = add_memory(root, c["category"], c["content"], source=c["source"])
+        to_index.append((entry["id"], c["content"]))
+        saved += 1
+
+    if to_index:
+        with console.status("Indexing…"):
+            batch_index_memories(root, to_index)
+
+    console.print(f"\n[green]Saved {saved} memory(s).[/green]")
+
+    if do_export:
+        from .export import export_all
+        with console.status("Exporting…"):
+            paths = export_all(root)
+        for p in paths:
+            console.print(f"[green]Exported[/green] {p.relative_to(root)}")
+
+
+# ---------------------------------------------------------------------------
+# mem export
+# ---------------------------------------------------------------------------
+
+@app.command()
+def export(
+    fmt: Annotated[
+        str,
+        typer.Option(
+            "--format", "-f",
+            help="Target format: agents | copilot | cursor | claude | all",
+        ),
+    ] = "all",
+) -> None:
+    """Export memories as AI context files."""
+    from .export import EXPORT_TARGETS, export_all
+
+    root = _require_root()
+    if fmt == "all":
+        paths = export_all(root)
+    elif fmt in EXPORT_TARGETS:
+        paths = [EXPORT_TARGETS[fmt](root)]
+    else:
+        valid = ", ".join(EXPORT_TARGETS) + ", all"
+        err_console.print(f"[red]Unknown format '{fmt}'. Choose: {valid}[/red]")
+        raise typer.Exit(code=1)
+
+    for p in paths:
+        rel = p.relative_to(root)
+        console.print(f"[green]Wrote[/green] {rel}")
+
+
+# ---------------------------------------------------------------------------
+# mem hook install
+# ---------------------------------------------------------------------------
+
+@hook_app.command("install")
+def hook_install() -> None:
+    """Interactive wizard to install the git post-commit hook."""
+    from .extract import install_git_hook, _is_git_repo
+    from rich.prompt import Confirm
+    from rich.syntax import Syntax
+
+    root = _require_root()
+
+    console.print()
+    console.print(f"  {_BANNER_TEXT}")
+    console.print()
+    console.print(f"  [bold]Git Hook Setup[/bold]")
+    console.print(
+        f"  [dim]A [bold {_P}]post-commit[/bold {_P}] hook runs automatically after every"
+        f" [bold]git commit[/bold].\n"
+        f"  Lore can use it to extract memories from your commit messages\n"
+        f"  and optionally keep your AI context files up to date.[/dim]"
+    )
+    console.print()
+
+    # Check git repo
+    if not _is_git_repo(root):
+        err_console.print(
+            f"[red]  ✗  {root} is not a git repository. Run [bold]git init[/bold] first.[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    # Check for existing hook
+    hook_path = root / ".git" / "hooks" / "post-commit"
+    if hook_path.exists():
+        existing = hook_path.read_text()
+        console.print(f"  [bold {_A}]▲[/bold {_A}]  A post-commit hook already exists:")
+        console.print()
+        console.print(Syntax(existing, "sh", theme="ansi_dark", line_numbers=False))
+        console.print()
+        if not Confirm.ask(
+            f"  [bold {_P}]Overwrite it?[/bold {_P}]", default=False
+        ):
+            console.print(f"  [dim]Cancelled — existing hook left in place.[/dim]\n")
+            raise typer.Exit()
+        console.print()
+
+    # Step 1 — extract on commit
+    console.print(f"  [bold]Step 1 of 2  —  Auto-extract memories from commits[/bold]")
+    console.print(
+        f"  [dim]After each commit, lore will scan the message for decisions,\n"
+        f"  choices, and context and store them automatically.[/dim]"
+    )
+    console.print()
+    do_extract = Confirm.ask(
+        f"  [bold {_P}]Enable auto-extract on commit?[/bold {_P}]", default=True
+    )
+    console.print()
+
+    if not do_extract:
+        console.print(f"  [dim]Nothing to install — hook requires at least auto-extract.\n"
+                      f"  You can always run [bold]lore extract[/bold] manually.[/dim]\n")
+        raise typer.Exit()
+
+    # Step 2 — auto-export
+    console.print(f"  [bold]Step 2 of 2  —  Auto-export AI context files on commit[/bold]")
+    console.print(
+        f"  [dim]After extracting, lore can immediately re-write:\n"
+        f"  [bold].github/copilot-instructions.md[/bold], [bold]AGENTS.md[/bold], "
+        f"[bold]CLAUDE.md[/bold], [bold].cursor/rules/memory.md[/bold]\n"
+        f"  so your AI tools always see the latest memories.[/dim]\n"
+        f"  [bold {_A}]Note:[/bold {_A}] [dim]This adds the exported files to your working tree —\n"
+        f"  you may want to stage and commit them in a follow-up commit.[/dim]"
+    )
+    console.print()
+    do_export = Confirm.ask(
+        f"  [bold {_P}]Also auto-export AI context files after each commit?[/bold {_P}]",
+        default=True,
+    )
+    console.print()
+
+    # Preview the hook script
+    preview_lines = [
+        "#!/bin/sh",
+        "# Installed by lore",
+        "lore extract --last 1 --auto",
+    ]
+    if do_export:
+        preview_lines.append("lore export")
+    preview_lines.append("")
+    preview = "\n".join(preview_lines)
+
+    console.print(f"  [dim]───────────────────────────────[/dim]")
+    console.print(f"  [bold]Hook script preview:[/bold]")
+    console.print()
+    console.print(Syntax(preview, "sh", theme="ansi_dark", line_numbers=False))
+    console.print(f"  [dim]Will be written to:[/dim] [bold]{hook_path}[/bold]")
+    console.print(f"  [dim]───────────────────────────────[/dim]")
+    console.print()
+
+    if not Confirm.ask(f"  [bold {_P}]Install this hook?[/bold {_P}]", default=True):
+        console.print(f"  [dim]Cancelled. Nothing was written.[/dim]\n")
+        raise typer.Exit()
+
+    try:
+        path = install_git_hook(root, auto_export=do_export)
+        console.print()
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  Hook installed at [bold]{path}[/bold]")
+        console.print()
+        console.print(f"  [dim]From now on, every [bold]git commit[/bold] will:[/dim]")
+        console.print(f"  [dim]  · Extract memory candidates from the commit message[/dim]")
+        if do_export:
+            console.print(f"  [dim]  · Regenerate all AI context files immediately[/dim]")
+        console.print(f"  [dim]Run [bold]lore list[/bold] after your next commit to see it in action.[/dim]")
+    except RuntimeError as e:
+        err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=1)
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# lore hook uninstall
+# ---------------------------------------------------------------------------
+
+@hook_app.command("uninstall")
+def hook_uninstall() -> None:
+    """Remove the lore-managed post-commit git hook."""
+    from .extract import uninstall_git_hook
+    from rich.prompt import Confirm
+
+    root = _require_root()
+    hook_path = root / ".git" / "hooks" / "post-commit"
+
+    if not hook_path.exists():
+        console.print("[yellow]No post-commit hook found — nothing to remove.[/yellow]")
+        raise typer.Exit()
+
+    content = hook_path.read_text()
+    if "# Installed by lore" not in content:
+        err_console.print(
+            f"[red]The hook at {hook_path} was not installed by lore.[/red]\n"
+            "[dim]Remove it manually to avoid accidentally deleting someone else's hook.[/dim]"
+        )
+        raise typer.Exit(code=1)
+
+    console.print(f"  [dim]Will remove:[/dim] [bold]{hook_path}[/bold]")
+    if not Confirm.ask(f"  [bold #39ff14]Remove the hook?[/bold #39ff14]", default=False):
+        console.print("  [dim]Cancelled — hook left in place.[/dim]")
+        raise typer.Exit()
+
+    try:
+        uninstall_git_hook(root)
+        console.print(f"  [bold #39ff14]✓[/bold #39ff14]  Hook removed.")
+    except RuntimeError as e:
+        err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# lore index rebuild
+# ---------------------------------------------------------------------------
+
+@index_app.command("rebuild")
+def index_rebuild() -> None:
+    """Rebuild the semantic embedding index from all stored memories."""
+    from .search import rebuild_index
+
+    root = _require_root()
+    with console.status("Rebuilding index…"):
+        count = rebuild_index(root)
+    console.print(f"[green]Indexed {count} memory(s).[/green]")
+
+
+# ---------------------------------------------------------------------------
+# lore config
+# ---------------------------------------------------------------------------
+
+@app.command("config")
+def config_set(
+    key: Annotated[str, typer.Argument(help="Config key to set")],
+    value: Annotated[str, typer.Argument(help="Value to set")],
+) -> None:
+    """Set a config value in .lore/config.yaml.
+
+    \b
+    Examples:
+      lore config model_endpoint https://artifactory.example.com/huggingface
+      lore config model_ssl_verify false
+      lore config embedding_model all-MiniLM-L6-v2
+    """
+    from .config import load_config, save_config
+    root = _require_root()
+    cfg = load_config(root)
+    # coerce booleans
+    coerced: object = value
+    if value.lower() in ("true", "yes", "1"):
+        coerced = True
+    elif value.lower() in ("false", "no", "0", "none", "null", ""):
+        coerced = False if value.lower() in ("false", "no", "0") else None
+    cfg[key] = coerced
+    save_config(root, cfg)
+    console.print(f"[green]Set[/green] {key} = {coerced!r}")
+
+
+# ---------------------------------------------------------------------------
+# lore security
+# ---------------------------------------------------------------------------
+
+@app.command()
+def security() -> None:
+    """Configure the security preamble injected into all AI context file exports."""
+    from .config import load_config, save_config
+    from rich.prompt import Prompt, Confirm
+
+    root = _require_root()
+    cfg  = load_config(root)
+    sec  = dict(cfg.get("security", {}))
+
+    console.print()
+    console.print(f"  {_BANNER_TEXT}")
+    console.print()
+    console.print(f"  [bold]Security preamble setup[/bold]")
+    console.print(
+        f"  [dim]When enabled, a security guidelines section is prepended to every\n"
+        f"  AI context file written by [bold]lore export[/bold] "
+        f"(.github/copilot-instructions.md, AGENTS.md, CLAUDE.md, .cursorrules).[/dim]"
+    )
+    console.print()
+
+    # ── Step 1: enable/disable ───────────────────────────────────────────────
+    currently = sec.get("enabled", False)
+    console.print(f"  [bold]Step 1 of 5  —  Enable security preamble[/bold]")
+    console.print(f"  [dim]Currently:[/dim] {'enabled' if currently else 'disabled'}")
+    console.print()
+    enabled = Confirm.ask(
+        f"  [bold {_P}]Include security guidelines in exports?[/bold {_P}]",
+        default=currently,
+    )
+    sec["enabled"] = enabled
+    console.print()
+
+    if not enabled:
+        cfg["security"] = sec
+        save_config(root, cfg)
+        console.print(f"  [dim]Security preamble disabled. Run [bold]lore export[/bold] to update files.[/dim]")
+        console.print()
+        return
+
+    # ── Step 2: OWASP Top 10 ────────────────────────────────────────────────
+    console.print(f"  [bold]Step 2 of 5  —  OWASP Top 10[/bold]")
+    console.print(
+        f"  [dim]Adds a bullet referencing all 10 OWASP categories\n"
+        f"  (injection, broken access control, cryptographic failures, etc.)[/dim]"
+    )
+    console.print()
+    sec["owasp_top10"] = Confirm.ask(
+        f"  [bold {_P}]Include OWASP Top 10 reference?[/bold {_P}]",
+        default=sec.get("owasp_top10", True),
+    )
+    console.print()
+
+    # ── Step 3: security policy file ────────────────────────────────────────
+    console.print(f"  [bold]Step 3 of 5  —  Security policy file[/bold]")
+    console.print(
+        f"  [dim]Path to your SECURITY.md (relative to repo root).\n"
+        f"  Leave blank to skip this reference.[/dim]"
+    )
+    console.print()
+    policy_default = sec.get("security_policy", "SECURITY.md") or ""
+    policy_input = Prompt.ask(
+        f"  [bold {_P}]Security policy file[/bold {_P}]",
+        default=policy_default,
+    )
+    sec["security_policy"] = policy_input.strip() or None
+    console.print()
+
+    # ── Step 4: CODEOWNERS ──────────────────────────────────────────────────
+    console.print(f"  [bold]Step 4 of 5  —  CODEOWNERS[/bold]")
+    console.print(
+        f"  [dim]Adds a note that sensitive paths are governed by CODEOWNERS\n"
+        f"  and require additional human review.[/dim]"
+    )
+    console.print()
+    sec["codeowners"] = Confirm.ask(
+        f"  [bold {_P}]Reference CODEOWNERS in guidelines?[/bold {_P}]",
+        default=sec.get("codeowners", True),
+    )
+    console.print()
+
+    # ── Step 5: custom rules ─────────────────────────────────────────────────
+    existing_rules: list[str] = sec.get("custom_rules", [])
+    console.print(f"  [bold]Step 5 of 5  —  Custom rules[/bold]")
+    console.print(
+        f"  [dim]Add project-specific security rules (e.g. \"Never call external APIs "
+        f"without rate limiting.\").\n  Enter one rule per prompt. Leave blank and press Enter to finish.[/dim]"
+    )
+    if existing_rules:
+        console.print(f"\n  [dim]Existing rules:[/dim]")
+        for r in existing_rules:
+            console.print(f"    [dim]·[/dim] {r}")
+    console.print()
+    keep_existing = True
+    if existing_rules:
+        keep_existing = Confirm.ask(
+            f"  [bold {_P}]Keep existing custom rules?[/bold {_P}]",
+            default=True,
+        )
+        console.print()
+    new_rules: list[str] = list(existing_rules) if keep_existing else []
+    while True:
+        rule = Prompt.ask(f"  [bold {_P}]Rule[/bold {_P}] [dim](blank to finish)[/dim]", default="")
+        if not rule.strip():
+            break
+        new_rules.append(rule.strip())
+    sec["custom_rules"] = new_rules
+    console.print()
+
+    # ── Save ─────────────────────────────────────────────────────────────────
+    console.print(f"  [dim]───────────────────────────────[/dim]")
+    console.print(f"  [bold]OWASP Top 10 :[/bold] {'yes' if sec['owasp_top10'] else 'no'}")
+    console.print(f"  [bold]Policy file  :[/bold] {sec['security_policy'] or '(none)'}")
+    console.print(f"  [bold]CODEOWNERS   :[/bold] {'yes' if sec['codeowners'] else 'no'}")
+    console.print(f"  [bold]Custom rules :[/bold] {len(sec['custom_rules'])}")
+    console.print(f"  [dim]───────────────────────────────[/dim]")
+    console.print()
+
+    if Confirm.ask(f"  [bold {_P}]Save and export now?[/bold {_P}]", default=True):
+        cfg["security"] = sec
+        save_config(root, cfg)
+        console.print()
+        from .export import export_all
+        paths = export_all(root)
+        for p in paths:
+            console.print(f"  [bold {_P}]✓[/bold {_P}]  Wrote {p.relative_to(root)}")
+    else:
+        cfg["security"] = sec
+        save_config(root, cfg)
+        console.print(f"  [dim]Saved. Run [bold]lore export[/bold] to apply to context files.[/dim]")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# lore doctor
+# ---------------------------------------------------------------------------
+
+@app.command()
+def doctor() -> None:
+    """Check lore setup — model, store, config, and search mode."""
+    from .config import find_memory_root, load_config, memory_dir
+
+    console.print(Panel(_BANNER_TEXT, border_style=_BD, padding=(0, 2), style=f"on {_BG}"))
+    console.print()
+
+    ok  = f"[bold {_P}]✓[/bold {_P}]"
+    warn = f"[bold {_A}]▲[/bold {_A}]"
+    err  = f"[bold red]✗[/bold red]"
+
+    # --- Store ---
+    root = find_memory_root()
+    if root:
+        mdir = memory_dir(root)
+        cfg  = load_config(root)
+        console.print(f"  {ok}  Store found at [bold]{mdir}[/bold]")
+    else:
+        console.print(f"  {err}  No .lore store found.")
+        console.print(f"       Run [bold]lore init[/bold] first, then re-run [bold]lore doctor[/bold].")
+        console.print(f"\n       [{_AD}]Model and config checks are skipped until the store exists.[/{_AD}]")
+        console.print()
+        raise SystemExit(1)
+
+    # --- Config values ---
+    endpoint   = cfg.get("model_endpoint")
+    ssl_verify = cfg.get("model_ssl_verify", True)
+    model_name = cfg.get("embedding_model", "all-MiniLM-L6-v2")
+    console.print(f"  {ok}  Embedding model : [bold]{model_name}[/bold]")
+    if endpoint:
+        console.print(f"  {ok}  Model endpoint  : [bold]{endpoint}[/bold]")
+    else:
+        console.print(f"  {warn}  Model endpoint  : [dim]not set (using huggingface.co directly)[/dim]")
+        console.print(f"       [{_AD}]→ If behind a proxy run:[/{_AD}] "
+                      f"[bold {_P}]lore config model_endpoint <url>[/bold {_P}]")
+    if not ssl_verify:
+        console.print(f"  {warn}  SSL verify      : [bold red]disabled[/bold red]")
+    else:
+        console.print(f"  {ok}  SSL verify      : enabled")
+
+    # --- Model availability ---
+    console.print()
+    console.print(f"  [{_A}]Checking model…[/{_A}]", end=" ")
+    try:
+        import logging, warnings, os, sys
+        for n in ("huggingface_hub", "sentence_transformers", "urllib3", "tqdm"):
+            logging.getLogger(n).setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
+        os.environ.setdefault("TQDM_DISABLE", "1")
+        if endpoint:
+            os.environ["HF_ENDPOINT"] = endpoint.rstrip("/")
+        if not ssl_verify:
+            import ssl
+            ssl._create_default_https_context = ssl._create_unverified_context  # noqa: SLF001
+        # Redirect stdout+stderr briefly to swallow the BERT LOAD REPORT
+        from io import StringIO
+        _old_out, _old_err = sys.stdout, sys.stderr
+        sys.stdout = sys.stderr = StringIO()
+        try:
+            from sentence_transformers import SentenceTransformer
+            SentenceTransformer(model_name)
+        finally:
+            sys.stdout, sys.stderr = _old_out, _old_err
+        console.print(f"[bold {_P}]semantic search active ✓[/bold {_P}]")
+        console.print(f"\n  {ok}  [bold]lore is fully operational.[/bold]")
+    except Exception as exc:
+        console.print(f"[bold {_A}]unavailable[/bold {_A}]")
+        console.print(f"  {warn}  Falling back to TF-IDF search (no embeddings).")
+        console.print(f"       [{_AD}]Reason: {exc}[/{_AD}]")
+        console.print(f"\n       [{_A}]To fix:[/{_A}] set [bold]model_endpoint[/bold] to an "
+                      "accessible HuggingFace mirror,")
+        console.print( "       or set [bold]model_ssl_verify false[/bold] if SSL is the only blocker.")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# lore ui  (Textual TUI)
+# ---------------------------------------------------------------------------
+
+@app.command()
+def ui() -> None:
+    """Open the interactive TUI — browse, add, delete, export in real time."""
+    try:
+        from .tui import LoreApp
+    except ImportError:
+        err_console.print(
+            "[red]textual is required for the TUI. Run: pip install textual[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    root = _require_root()
+    LoreApp(root).run()
+
+
+# ---------------------------------------------------------------------------
+# lore awaken  (spellbook daemon)
+# ---------------------------------------------------------------------------
+
+@app.command()
+def awaken(
+    background: Annotated[
+        bool,
+        typer.Option("--background", "-b", help="Run as a detached background daemon"),
+    ] = False,
+    debounce: Annotated[
+        float,
+        typer.Option("--debounce", help="Seconds to wait after last change before re-exporting"),
+    ] = 1.5,
+) -> None:
+    """Awaken the spellbook — watch .lore and auto-export AI context on every change."""
+    import os
+    import threading
+    import time
+    from datetime import datetime, timezone
+    from rich.live import Live
+    from .daemon import run_spellbook, SpellbookState, SpellbookStatus, daemonize, pid_file
+
+    root = _require_root()
+    pf = pid_file(root)
+
+    # Guard: refuse if a daemon is already awake.
+    if pf.exists():
+        try:
+            existing_pid = int(pf.read_text().strip())
+            os.kill(existing_pid, 0)
+            console.print(
+                f"[yellow]The spellbook is already awake (PID {existing_pid}).[/yellow]\n"
+                f"[dim]Run [bold]lore slumber[/bold] to put it to sleep first.[/dim]"
+            )
+            raise typer.Exit()
+        except (ProcessLookupError, ValueError):
+            pf.unlink(missing_ok=True)
+
+    # ── Background mode ──────────────────────────────────────────────────────
+    if background:
+        if not hasattr(os, "fork"):
+            err_console.print("[red]Background mode requires POSIX (macOS / Linux).[/red]")
+            raise typer.Exit(code=1)
+        daemonize(root, debounce=debounce)
+        console.print(
+            f"\n  [bold {_P}]✓[/bold {_P}]  The spellbook stirs in the shadows.\n"
+            f"  [dim]Run [bold]lore slumber[/bold] to put it to rest.[/dim]\n"
+        )
+        return
+
+    # ── Foreground mode — Rich Live display ──────────────────────────────────
+    _STATUS_ICON = {
+        SpellbookStatus.IDLE: "💤",
+        SpellbookStatus.WATCHING: "👁 ",
+        SpellbookStatus.CASTING: "✨",
+    }
+    _STATUS_COLOR = {
+        SpellbookStatus.IDLE: _PD,
+        SpellbookStatus.WATCHING: _P,
+        SpellbookStatus.CASTING: _A,
+    }
+
+    state_ref: list[SpellbookState] = [SpellbookState()]
+
+    def _on_state_change(s: SpellbookState) -> None:
+        state_ref[0] = s
+
+    def _make_panel(s: SpellbookState) -> Panel:
+        icon = _STATUS_ICON[s.status]
+        color = _STATUS_COLOR[s.status]
+        last = s.last_cast.strftime("%H:%M:%S") if s.last_cast else "—"
+        uptime = str(datetime.now(timezone.utc) - s.started_at).split(".")[0]
+        lines = [
+            f"  [bold {color}]{icon}  {s.status.value.upper()}[/bold {color}]",
+            "",
+            f"  [dim]Watching :[/dim]  [bold]{root / '.lore'}[/bold]",
+            f"  [dim]Last cast:[/dim]  [bold]{last}[/bold]   [dim]({s.cast_count} total)[/dim]",
+            f"  [dim]Uptime   :[/dim]  {uptime}",
+        ]
+        if s.last_scroll:
+            lines.append(f"  [dim]Changed  :[/dim]  {s.last_scroll}")
+        if s.errors:
+            lines += ["", f"  [bold red]Errors:[/bold red]"]
+            for e in s.errors[-3:]:
+                lines.append(f"  [red]· {e}[/red]")
+        lines += ["", f"  [dim]Ctrl+C to banish[/dim]"]
+        return Panel(
+            "\n".join(lines),
+            title=f"[bold {_A}]📜  Spellbook[/bold {_A}]",
+            border_style=_BD,
+            style=f"on {_BG}",
+        )
+
+    stop_event = threading.Event()
+    daemon_thread = threading.Thread(
+        target=run_spellbook,
+        args=(root, debounce),
+        kwargs={"on_state_change": _on_state_change, "stop_event": stop_event},
+        daemon=True,
+    )
+    daemon_thread.start()
+
+    try:
+        with Live(_make_panel(state_ref[0]), console=console, refresh_per_second=4) as live:
+            while daemon_thread.is_alive():
+                live.update(_make_panel(state_ref[0]))
+                time.sleep(0.25)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop_event.set()
+        daemon_thread.join(timeout=3)
+        console.print(f"\n  [dim]The spellbook has been banished. Farewell.[/dim]\n")
+
+
+# ---------------------------------------------------------------------------
+# lore slumber  (stop background daemon)
+# ---------------------------------------------------------------------------
+
+@app.command()
+def slumber() -> None:
+    """Banish the background spellbook daemon."""
+    import os
+    import signal as _signal
+    from .daemon import pid_file
+
+    root = _require_root()
+    pf = pid_file(root)
+
+    if not pf.exists():
+        console.print("[yellow]No spellbook is currently awake.[/yellow]")
+        raise typer.Exit()
+
+    try:
+        pid = int(pf.read_text().strip())
+        os.kill(pid, _signal.SIGTERM)
+        pf.unlink(missing_ok=True)
+        console.print(
+            f"\n  [bold {_P}]✓[/bold {_P}]  The spellbook drifts into slumber. (PID {pid})\n"
+        )
+    except (ValueError, ProcessLookupError):
+        pf.unlink(missing_ok=True)
+        console.print("[yellow]Spellbook was not running. Cleaned up stale PID file.[/yellow]")
+    except PermissionError:
+        err_console.print("[red]Permission denied — cannot stop the daemon.[/red]")
+        raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# lore relic capture
+# ---------------------------------------------------------------------------
+
+@relic_app.command("capture")
+def relic_capture(
+    file: Annotated[
+        Optional[Path],
+        typer.Option("--file", "-f", help="Read content from a file"),
+    ] = None,
+    git_diff: Annotated[
+        bool,
+        typer.Option("--git-diff", help="Capture working-tree + staged diff"),
+    ] = False,
+    git_log: Annotated[
+        Optional[int],
+        typer.Option("--git-log", help="Capture the last N commits (messages + diffs)"),
+    ] = None,
+    clipboard: Annotated[
+        bool,
+        typer.Option("--clipboard", "-c", help="Read from the system clipboard"),
+    ] = False,
+    stdin: Annotated[
+        bool,
+        typer.Option("--stdin", help="Read from stdin (e.g. cat notes.txt | lore relic capture --stdin)"),
+    ] = False,
+    title: Annotated[
+        Optional[str],
+        typer.Option("--title", "-t", help="Relic title (skips the prompt)"),
+    ] = None,
+    tags: Annotated[
+        Optional[str],
+        typer.Option("--tags", help="Comma-separated tags"),
+    ] = None,
+) -> None:
+    """Capture a session, notes, or diff as a relic in the spellbook."""
+    import subprocess
+    import sys as _sys
+    from rich.prompt import Prompt, Confirm
+    from rich.rule import Rule as _Rule
+    from .relics import save_relic
+
+    root = _require_root()
+
+    auto_sources = sum([bool(file), git_diff, bool(git_log is not None), clipboard, stdin])
+    if auto_sources > 1:
+        err_console.print("[red]Specify only one of: --file, --git-diff, --git-log, --clipboard, --stdin[/red]")
+        raise typer.Exit(code=1)
+
+    content = ""
+    source_label = "manual"
+
+    if stdin:
+        content = _sys.stdin.read()
+        source_label = "stdin"
+
+    elif file:
+        if not file.exists():
+            err_console.print(f"[red]File not found: {file}[/red]")
+            raise typer.Exit(code=1)
+        content = file.read_text(encoding="utf-8", errors="replace")
+        source_label = str(file)
+
+    elif clipboard:
+        try:
+            r = subprocess.run(["pbpaste"], capture_output=True, text=True)
+            if r.returncode != 0:
+                r = subprocess.run(["xclip", "-selection", "clipboard", "-o"],
+                                   capture_output=True, text=True)
+            content = r.stdout
+            source_label = "clipboard"
+        except FileNotFoundError:
+            err_console.print("[red]Clipboard tool not found (needs pbpaste on macOS or xclip on Linux).[/red]")
+            raise typer.Exit(code=1)
+
+    elif git_diff:
+        try:
+            for _args in (["git", "diff"], ["git", "diff", "--cached"]):
+                r = subprocess.run(_args, capture_output=True, text=True, cwd=root)
+                if r.stdout.strip():
+                    content = (content + "\n" + r.stdout).strip()
+            if not content:
+                err_console.print("[yellow]No unstaged or staged changes found.[/yellow]")
+                raise typer.Exit()
+            source_label = "git-diff"
+        except FileNotFoundError:
+            err_console.print("[red]git not found in PATH.[/red]")
+            raise typer.Exit(code=1)
+
+    elif git_log is not None:
+        try:
+            n = max(1, git_log)
+            r1 = subprocess.run(
+                ["git", "log", f"-{n}", "--stat", "--oneline"],
+                capture_output=True, text=True, cwd=root,
+            )
+            r2 = subprocess.run(
+                ["git", "log", f"-{n}", "-p", "--no-merges"],
+                capture_output=True, text=True, cwd=root,
+            )
+            content = (r1.stdout.strip() + "\n\n" + r2.stdout.strip()).strip()
+            if not content:
+                err_console.print("[yellow]No commits found.[/yellow]")
+                raise typer.Exit()
+            source_label = f"git-log-{n}"
+        except FileNotFoundError:
+            err_console.print("[red]git not found in PATH.[/red]")
+            raise typer.Exit(code=1)
+
+    non_interactive = bool(auto_sources)
+
+    console.print()
+    console.print(Panel(
+        f"[bold {_A}]🏺  Relic Capture[/bold {_A}]\n"
+        f"[dim]Preserve a session, doc, or diff — then distill it into spells.[/dim]",
+        border_style=_BD, padding=(0, 2), style=f"on {_BG}",
+    ))
+    console.print()
+
+    if not non_interactive:
+        console.print(f"  [bold]Content[/bold]  [dim]— paste notes, a doc excerpt, or anything worth keeping.[/dim]")
+        console.print(f"  [dim]Enter [bold].[/bold] on its own line when done.  Ctrl-C to abort.[/dim]")
+        console.print()
+        lines_in: list[str] = []
+        try:
+            while True:
+                try:
+                    line = console.input(f"  [{_PD}]>[/{_PD}] ")
+                except EOFError:
+                    break
+                if line.strip() == ".":
+                    break
+                lines_in.append(line)
+        except KeyboardInterrupt:
+            console.print("\n  [dim]Aborted.[/dim]\n")
+            raise typer.Exit()
+        content = "\n".join(lines_in).strip()
+        if not content:
+            console.print("[yellow]No content entered. Relic not saved.[/yellow]")
+            raise typer.Exit()
+    else:
+        console.print(f"  [dim]Source:[/dim] {source_label}  [dim]({len(content):,} chars)[/dim]")
+        console.print()
+
+    # ── Title ─────────────────────────────────────────────────────────────────
+    if title is None:
+        default_title = ""
+        if git_log is not None:
+            default_title = f"git session — last {git_log} commits"
+        elif git_diff:
+            default_title = "git diff"
+        elif file:
+            default_title = file.stem.replace("_", " ").replace("-", " ")
+        console.print()
+        title = Prompt.ask(f"  [bold {_P}]Title[/bold {_P}]", default=default_title or "")
+        while not title.strip():
+            console.print(f"  [bold red]A relic must have a title.[/bold red]")
+            title = Prompt.ask(f"  [bold {_P}]Title[/bold {_P}]")
+
+    # ── Tags ──────────────────────────────────────────────────────────────────
+    tag_list: list[str] = []
+    if tags is not None:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+    elif not non_interactive:
+        tags_raw = Prompt.ask(
+            f"  [bold {_P}]Tags[/bold {_P}] [dim](comma-separated, optional)[/dim]", default=""
+        )
+        tag_list = [t.strip() for t in tags_raw.split(",") if t.strip()]
+
+    console.print()
+    console.print(_Rule(f"  [bold {_A}]Preview[/bold {_A}]  ", style=_BD))
+    console.print(f"  [bold]Title  :[/bold] {title}")
+    console.print(f"  [bold]Tags   :[/bold] {', '.join(tag_list) or '(none)'}")
+    console.print(f"  [bold]Content:[/bold] {len(content):,} chars")
+    console.print()
+
+    if not non_interactive:
+        if not Confirm.ask(f"  [bold {_P}]Seal this relic?[/bold {_P}]", default=True):
+            console.print("\n  [dim]The relic fades. Nothing was saved.[/dim]\n")
+            raise typer.Exit()
+
+    relic = save_relic(root, title.strip(), content, tags=tag_list, source=source_label)
+    console.print(f"\n  [bold {_P}]✓[/bold {_P}]  Relic [bold]{relic['id']}[/bold] — [bold]{title}[/bold]")
+
+    console.print()
+    if not non_interactive:
+        if Confirm.ask(f"  [bold {_P}]Distill spells from this relic now?[/bold {_P}]", default=False):
+            _relic_distill_impl(root, relic["id"])
+            return
+    console.print(f"  [dim]Run [bold]lore relic distill {relic['id']}[/bold] to extract spells.[/dim]")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# lore relic list
+# ---------------------------------------------------------------------------
+
+@relic_app.command("list")
+def relic_list() -> None:
+    """List all captured relics."""
+    from .relics import list_relics
+
+    root = _require_root()
+    relics = list_relics(root)
+    if not relics:
+        console.print(
+            "[yellow]No relics found. Run [bold]lore relic capture[/bold] to preserve your first artifact.[/yellow]"
+        )
+        return
+
+    table = Table(show_header=True, header_style=f"bold {_A}", expand=True, box=box.SIMPLE)
+    table.add_column("ID",      style="dim",        width=10, no_wrap=True)
+    table.add_column("Title",   style=f"bold {_P}", min_width=20, overflow="fold")
+    table.add_column("Preview", min_width=40,        overflow="fold")
+    table.add_column("Tags",    width=16,            no_wrap=True)
+    table.add_column("✦",       width=4,             no_wrap=True)
+    table.add_column("Date",    width=10,            no_wrap=True)
+
+    for r in relics:
+        linked = r.get("linked_memories", [])
+        preview = (
+            r.get("summary", "").strip()
+            or r.get("content", "").replace("\n", " ")[:80]
+        )
+        spell_count = len(linked)
+        table.add_row(
+            r.get("id", ""),
+            r.get("title", ""),
+            f"[dim]{preview}[/dim]" if preview else "[dim]—[/dim]",
+            ", ".join(r.get("tags", [])) or "[dim]—[/dim]",
+            f"[bold green]{spell_count}[/bold green]" if spell_count else "[dim]—[/dim]",
+            r.get("created_at", "")[:10],
+        )
+
+    console.print()
+    console.print(table)
+    console.print(
+        f"  [dim]{len(relics)} relic(s).  "
+        f"Run [bold]lore relic distill <id>[/bold] to extract spells.[/dim]\n"
+    )
+
+
+# ---------------------------------------------------------------------------
+# lore relic distill  (internal impl + public command)
+# ---------------------------------------------------------------------------
+
+def _relic_distill_impl(root: Path, relic_id: str) -> None:
+    """Shared distill logic used by both `relic distill` and the post-capture prompt."""
+    from rich.prompt import Prompt
+    from rich.rule import Rule as _Rule
+    from .relics import get_relic, link_memory_to_relic
+    from .store import add_memory
+    from .search import index_memory
+    from .config import load_config
+
+    relic = get_relic(root, relic_id)
+    if not relic:
+        err_console.print(f"[red]Relic '{relic_id}' not found.[/red]")
+        return
+
+    console.print()
+    console.print(Panel(
+        f"[bold {_A}]🏺  Distilling — {relic['title']}[/bold {_A}]\n"
+        f"[dim]ID: {relic['id']}[/dim]",
+        border_style=_BD, padding=(0, 2), style=f"on {_BG}",
+    ))
+    console.print()
+
+    # Show a content preview so the user has the context in front of them.
+    preview = relic["content"][:600]
+    if len(relic["content"]) > 600:
+        preview += f"\n[dim]… ({len(relic['content']) - 600} more chars — run [bold]lore relic view {relic_id}[/bold] for full text)[/dim]"
+    console.print(f"[dim]{preview}[/dim]")
+    console.print()
+    console.print(_Rule(f"  [bold {_A}]Extract Spells[/bold {_A}]  ", style=_BD))
+    console.print(f"  [dim]Type each memory you want to keep. Enter [bold].[/bold] or blank line to finish.[/dim]")
+    console.print()
+
+    cfg = load_config(root)
+    valid_cats = cfg.get("categories", ["decisions", "facts", "preferences", "summaries"])
+    cats_display = "  ".join(f"[bold]{c}[/bold]" if i == 0 else f"[dim]{c}[/dim]"
+                             for i, c in enumerate(valid_cats))
+    console.print(f"  [dim]Tomes available:[/dim]  {cats_display}\n")
+
+    saved = 0
+    spell_num = 1
+    default_cat = valid_cats[0] if valid_cats else "facts"
+    while True:
+        console.print(f"  [dim]─── Spell #{spell_num} ───────────────────────────────────────────[/dim]")
+        mem_content = Prompt.ask(
+            f"  [bold {_P}]✦ Inscription[/bold {_P}]  [dim]the wisdom to enshrine  (. to seal the book)[/dim]",
+            default="",
+        )
+        if not mem_content.strip() or mem_content.strip() == ".":
+            break
+        cat = Prompt.ask(
+            f"  [bold {_P}]✦ Tome[/bold {_P}]         [dim]which grimoire?[/dim]",
+            default=default_cat,
+        )
+        default_cat = cat  # sticky for next iteration
+
+        with console.status(
+            f"  [dim]Inscribing spell #{spell_num} into the {cat} tome…[/dim]",
+            spinner="dots",
+        ):
+            entry = add_memory(root, cat, mem_content.strip(), tags=[], source=f"relic:{relic_id}")
+            index_memory(root, entry["id"], mem_content.strip())
+            link_memory_to_relic(root, relic_id, entry["id"])
+
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  Spell [bold]{entry['id']}[/bold] sealed into [bold]{cat}[/bold].\n")
+        saved += 1
+        spell_num += 1
+
+    console.print()
+    if saved:
+        console.print(
+            f"  [bold {_P}]✓[/bold {_P}]  {saved} spell(s) distilled from [bold]{relic['title']}[/bold]."
+        )
+    else:
+        console.print(f"  [dim]No spells extracted. The relic remains sealed.[/dim]")
+    console.print()
+
+
+@relic_app.command("distill")
+def relic_distill(
+    relic_id: Annotated[str, typer.Argument(help="Relic ID to distill memories from")],
+) -> None:
+    """Distill a relic into spellbook memories — you choose what to keep."""
+    root = _require_root()
+    _relic_distill_impl(root, relic_id)
+
+
+# ---------------------------------------------------------------------------
+# lore relic view
+# ---------------------------------------------------------------------------
+
+@relic_app.command("view")
+def relic_view(
+    relic_id: Annotated[str, typer.Argument(help="Relic ID to view")],
+) -> None:
+    """View the full content of a relic."""
+    from rich.markdown import Markdown
+    from .relics import get_relic
+
+    root = _require_root()
+    relic = get_relic(root, relic_id)
+    if not relic:
+        err_console.print(f"[red]Relic '{relic_id}' not found.[/red]")
+        raise typer.Exit(code=1)
+
+    linked = relic.get("linked_memories", [])
+    summary_line = f"\n\n[italic]{relic['summary']}[/italic]" if relic.get("summary") else ""
+    console.print()
+    console.print(Panel(
+        f"[bold {_A}]{relic['title']}[/bold {_A}]\n"
+        f"[dim]ID: {relic['id']}  ·  {relic['created_at'][:10]}  ·  "
+        f"Tags: {', '.join(relic.get('tags', [])) or 'none'}  ·  "
+        f"Spells: {len(linked)}[/dim]"
+        + summary_line,
+        border_style=_BD, style=f"on {_BG}",
+    ))
+    console.print()
+    console.print(Markdown(relic["content"]))
+    if linked:
+        console.print()
+        console.print(f"  [dim]Linked spells:[/dim] {', '.join(linked)}")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# lore relic remove
+# ---------------------------------------------------------------------------
+
+@relic_app.command("remove")
+def relic_remove(
+    relic_id: Annotated[str, typer.Argument(help="Relic ID to delete")],
+) -> None:
+    """Permanently delete a relic from the spellbook."""
+    from rich.prompt import Confirm
+    from .relics import remove_relic, get_relic
+
+    root = _require_root()
+    relic = get_relic(root, relic_id)
+    if not relic:
+        err_console.print(f"[red]Relic '{relic_id}' not found.[/red]")
+        raise typer.Exit(code=1)
+
+    console.print(f"\n  [bold]Title:[/bold] {relic['title']}")
+    console.print(f"  [bold]Spells linked:[/bold] {len(relic.get('linked_memories', []))}")
+    console.print()
+    if not Confirm.ask(f"  [bold red]Permanently destroy this relic?[/bold red]", default=False):
+        console.print("  [dim]Reprieved. Nothing was deleted.[/dim]\n")
+        raise typer.Exit()
+
+    remove_relic(root, relic_id)
+    console.print(f"\n  [bold {_P}]✓[/bold {_P}]  Relic [bold]{relic_id}[/bold] has been destroyed.\n")

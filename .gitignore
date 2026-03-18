@@ -1,0 +1,15 @@
+/.lore
+
+src/lore/__pycache__/
+
+*.pdf
+
+README_tmp.html
+
+.cursor/rules/memory.md
+
+.github/copilot-instructions.md
+
+AGENTS.md
+
+CLAUDE.md
