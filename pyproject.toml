@@ -4,9 +4,25 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lore-book"
-version = "0.1.0"
+version = "0.1.1"
 description = "The spellbook for your codebase — chronicle decisions, lore, and context your AI companions can actually read."
 readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Jason Johnson", email = "jrj@p7n.net"},
+]
+keywords = ["ai", "developer-tools", "documentation", "copilot", "context", "knowledge-management"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Utilities",
+]
 requires-python = ">=3.10"
 dependencies = [
     "typer>=0.12",
@@ -30,6 +46,11 @@ all = [
 
 [project.scripts]
 lore = "lore.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/CptPlastic/lore-book"
+Repository = "https://github.com/CptPlastic/lore-book"
+Issues = "https://github.com/CptPlastic/lore-book/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lore"]
