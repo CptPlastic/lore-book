@@ -2,10 +2,68 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 
 def _is_git_repo(root: Path) -> bool:
     return (root / ".git").is_dir()
+
+
+def git_context(root: Path) -> dict[str, Any]:
+    """Return a dict of useful git metadata for the repo at *root*.
+
+    Keys (all optional — absent if not in a git repo or git call fails):
+      branch       current branch name (str)
+      author       git config user.name (str)
+      remote_name  name parsed from origin remote URL (str)
+      last_sha     HEAD commit hex sha, 8 chars (str)
+      last_msg     HEAD commit message, first line (str)
+    """
+    if not _is_git_repo(root):
+        return {}
+    try:
+        from git import Repo, InvalidGitRepositoryError
+        repo = Repo(root, search_parent_directories=True)
+    except Exception:
+        return {}
+
+    ctx: dict[str, Any] = {}
+
+    # Branch
+    try:
+        ctx["branch"] = repo.active_branch.name
+    except TypeError:
+        ctx["branch"] = "HEAD"  # detached HEAD state
+
+    # Author (git config user.name)
+    try:
+        ctx["author"] = repo.config_reader().get_value("user", "name", default="") or None
+        if ctx["author"] is None:
+            del ctx["author"]
+    except Exception:
+        pass
+
+    # Remote name (parse from origin URL: github.com/org/repo → repo)
+    try:
+        origin = repo.remotes["origin"].url
+        # strip .git suffix and take the last path segment
+        name = origin.rstrip("/").rstrip(".git").split("/")[-1]
+        if name.endswith(".git"):
+            name = name[:-4]
+        if name:
+            ctx["remote_name"] = name
+    except Exception:
+        pass
+
+    # Last commit
+    try:
+        head = repo.head.commit
+        ctx["last_sha"] = head.hexsha[:8]
+        ctx["last_msg"] = head.message.strip().splitlines()[0]
+    except Exception:
+        pass
+
+    return ctx
 
 
 def extract_from_git(

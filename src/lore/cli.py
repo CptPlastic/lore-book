@@ -196,8 +196,18 @@ def init(
 ) -> None:
     """Initialize a .lore store in the given directory."""
     from .store import init_store
+    from .extract import _is_git_repo
     root = path.resolve()
     init_store(root)
+    # Warn if not inside a git repo — extract/hook won't work
+    if not _is_git_repo(root):
+        console.print(
+            f"  [bold {_A}]▲[/bold {_A}]  [bold]{root}[/bold] is not a git repository.\n"
+            f"  [dim]lore add/search/export work fine here, but [bold]lore extract[/bold] and "
+            f"[bold]lore hook[/bold] require git.\n"
+            f"  Run [bold]git init[/bold] first if you need those features.[/dim]"
+        )
+        console.print()
     # Add .lore to .gitignore if inside a git repo
     gitignore = root / ".gitignore"
     entry = ".lore/"
@@ -1146,6 +1156,34 @@ def doctor() -> None:
         console.print(f"\n       [{_AD}]Model and config checks are skipped until the store exists.[/{_AD}]")
         console.print()
         raise SystemExit(1)
+
+    # --- Git ---
+    from .extract import _is_git_repo, git_context
+    console.print()
+    if _is_git_repo(root):
+        ctx = git_context(root)
+        branch = ctx.get("branch", "unknown")
+        author = ctx.get("author")
+        remote = ctx.get("remote_name")
+        last_sha = ctx.get("last_sha")
+        last_msg = ctx.get("last_msg", "")
+        repo_label = remote or root.name
+        console.print(f"  {ok}  Git repo        : [bold]{repo_label}[/bold]")
+        console.print(f"  {ok}  Branch          : [bold]{branch}[/bold]")
+        if author:
+            console.print(f"  {ok}  Author          : [bold]{author}[/bold]")
+        if last_sha:
+            short_msg = last_msg[:60] + ("…" if len(last_msg) > 60 else "")
+            console.print(f"  {ok}  Last commit     : [dim]{last_sha}[/dim] {short_msg}")
+        hook_path = root / ".git" / "hooks" / "post-commit"
+        if hook_path.exists() and "# Installed by lore" in hook_path.read_text():
+            console.print(f"  {ok}  Post-commit hook: [bold]installed[/bold]")
+        else:
+            console.print(f"  {warn}  Post-commit hook: [dim]not installed[/dim]  "
+                          f"[{_AD}]→ run [bold {_P}]lore hook install[/bold {_P}][/{_AD}]")
+    else:
+        console.print(f"  {warn}  Git repo        : [bold {_A}]not a git repository[/bold {_A}]")
+        console.print(f"       [{_AD}][bold]lore extract[/bold] and [bold]lore hook[/bold] require git.[/{_AD}]")
 
     # --- Config values ---
     endpoint   = cfg.get("model_endpoint")

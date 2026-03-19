@@ -15,7 +15,8 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Input, Label, Static
 
-from .store import add_memory, list_memories, remove_memory
+from rich.markup import escape as _escape
+from .store import add_memory, list_memories, remove_memory, update_memory
 
 # ---------------------------------------------------------------------------
 # Palette
@@ -64,6 +65,157 @@ _MODAL_BTN = f"""
     #cancel {{ background: {_BG}; color: {_PHOSPHOR_D}; }}
     #cancel:hover {{ background: {_BORDER}; color: {_PHOSPHOR}; }}
 """
+
+
+# ---------------------------------------------------------------------------
+# Detail-view modal  (Enter on a row)
+# ---------------------------------------------------------------------------
+
+class DetailScreen(ModalScreen):
+    """Full read-only detail view for a memory entry."""
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close", show=False),
+        Binding("enter",  "dismiss", "Close", show=False),
+        Binding("space",  "dismiss", "Close", show=False),
+    ]
+
+    CSS = f"""
+    DetailScreen {{ align: center middle; }}
+    #dialog {{
+        width: 80; height: auto;
+        border: solid {_BORDER}; background: {_BG}; padding: 1 2;
+    }}
+    #dialog-title {{
+        color: {_AMBER}; text-style: bold; text-align: center;
+        width: 1fr; margin-bottom: 1;
+    }}
+    #content-box {{
+        background: {_SURFACE}; color: {_PHOSPHOR_H};
+        border: solid {_BORDER}; padding: 0 1; margin: 1 0;
+        height: auto;
+    }}
+    .meta-row {{ height: 1; margin-bottom: 0; }}
+    .meta-key {{ color: {_AMBER_D}; width: 12; }}
+    .meta-val {{ color: {_PHOSPHOR}; }}
+    #hint {{ color: {_PHOSPHOR_M}; text-align: center; margin-top: 1; }}
+    """
+
+    def __init__(self, memory: dict) -> None:
+        super().__init__()
+        self._memory = memory
+
+    def compose(self) -> ComposeResult:
+        m = self._memory
+        with Vertical(id="dialog"):
+            yield Label(f"◈  {m.get('id', '')}  ◈", id="dialog-title", markup=False)
+            yield Static(_escape(m.get("content", "")), id="content-box")
+            with Horizontal(classes="meta-row"):
+                yield Label("CATEGORY", classes="meta-key")
+                yield Label(m.get("category", ""), classes="meta-val", markup=False)
+            with Horizontal(classes="meta-row"):
+                yield Label("TAGS", classes="meta-key")
+                yield Label(", ".join(m.get("tags", [])) or "—", classes="meta-val", markup=False)
+            with Horizontal(classes="meta-row"):
+                yield Label("BRANCH", classes="meta-key")
+                yield Label(m.get("git_branch", "—"), classes="meta-val", markup=False)
+            with Horizontal(classes="meta-row"):
+                yield Label("AUTHOR", classes="meta-key")
+                yield Label(m.get("git_author", "—"), classes="meta-val", markup=False)
+            with Horizontal(classes="meta-row"):
+                yield Label("SOURCE", classes="meta-key")
+                yield Label(m.get("source", "manual"), classes="meta-val", markup=False)
+            with Horizontal(classes="meta-row"):
+                yield Label("CREATED", classes="meta-key")
+                yield Label(m.get("created_at", "")[:19], classes="meta-val", markup=False)
+            yield Label("[ ENTER · SPACE · ESC to close ]", id="hint", markup=False)
+
+
+# ---------------------------------------------------------------------------
+# Edit-memory modal  (u key)
+# ---------------------------------------------------------------------------
+
+class EditMemoryScreen(ModalScreen):
+    """Edit an existing memory entry in-place."""
+
+    _CAT     = "#edit-cat"
+    _CONTENT = "#edit-content"
+    _TAGS    = "#edit-tags"
+
+    CSS = f"""
+    EditMemoryScreen {{ align: center middle; }}
+    #dialog {{
+        width: 72; height: auto;
+        border: solid {_AMBER}; background: {_BG}; padding: 1 2;
+    }}
+    #dialog-title {{
+        color: {_AMBER}; text-style: bold; text-align: center;
+        width: 1fr; margin-bottom: 1;
+    }}
+    .field-label {{ color: {_PHOSPHOR_D}; height: 1; }}
+    .field-input {{
+        background: {_SURFACE}; color: {_PHOSPHOR};
+        border: solid {_BORDER}; margin-bottom: 1;
+    }}
+    .field-input:focus {{ border: solid {_AMBER}; color: {_PHOSPHOR_H}; }}
+    #btn-row {{ height: auto; align: right middle; margin-top: 1; }}
+    {_MODAL_BTN}
+    #save {{
+        background: {_BORDER}; color: {_PHOSPHOR};
+        border: solid {_AMBER}; text-style: bold;
+    }}
+    #save:hover {{ background: {_AMBER}; color: {_BG}; }}
+    """
+
+    def __init__(self, memory: dict) -> None:
+        super().__init__()
+        self._memory = memory
+
+    def compose(self) -> ComposeResult:
+        m = self._memory
+        with Vertical(id="dialog"):
+            yield Label(f"◈  EDIT  {m.get('id', '')}  ◈", id="dialog-title", markup=False)
+            yield Label("CATEGORY", classes="field-label")
+            yield Input(value=m.get("category", ""), id="edit-cat", classes="field-input")
+            yield Label("CONTENT", classes="field-label")
+            yield Input(value=m.get("content", ""), id="edit-content", classes="field-input")
+            yield Label("TAGS  (comma-separated)", classes="field-label")
+            yield Input(value=", ".join(m.get("tags", [])), id="edit-tags", classes="field-input")
+            with Horizontal(id="btn-row"):
+                yield Button("[[ CANCEL ]]", id="cancel")
+                yield Button("[[ SAVE  ]]", id="save")
+
+    def on_mount(self) -> None:
+        self.query_one(self._CONTENT, Input).focus()
+
+    @on(Button.Pressed, "#cancel")
+    def cancel(self) -> None:
+        self.dismiss(None)
+
+    @on(Button.Pressed, "#save")
+    def save(self) -> None:
+        cat     = self.query_one(self._CAT,     Input).value.strip() or "facts"
+        content = self.query_one(self._CONTENT, Input).value.strip()
+        tags_raw = self.query_one(self._TAGS,   Input).value.strip()
+        tags = [t.strip() for t in tags_raw.split(",") if t.strip()] if tags_raw else []
+        if not content:
+            self.query_one(self._CONTENT, Input).focus()
+            return
+        self.dismiss({
+            "id":       self._memory["id"],
+            "category": cat,
+            "content":  content,
+            "tags":     tags,
+        })
+
+    @on(Input.Submitted)
+    def on_submit(self, event: Input.Submitted) -> None:
+        if event.input.id == "edit-cat":
+            self.query_one(self._CONTENT, Input).focus()
+        elif event.input.id == "edit-content":
+            self.query_one(self._TAGS, Input).focus()
+        else:
+            self.save()
 
 
 # ---------------------------------------------------------------------------
@@ -303,13 +455,14 @@ class LoreApp(App):
     """
 
     BINDINGS: ClassVar[list[Binding]] = [
-        Binding("a", "add_memory",    "Add"),
-        Binding("d", "delete_memory", "Delete"),
-        Binding("e", "export_all",    "Export"),
-        Binding("r", "refresh",       "Refresh"),
-        Binding("/", "focus_search",  "Search"),
-        Binding("escape", "clear_search", "Clear", show=False),
-        Binding("q", "quit", "Quit"),
+        Binding("a",      "add_memory",    "Add"),
+        Binding("u",      "edit_memory",   "Edit"),
+        Binding("d",      "delete_memory", "Delete"),
+        Binding("e",      "export_all",    "Export"),
+        Binding("r",      "refresh",       "Refresh"),
+        Binding("/",      "focus_search",  "Search"),
+        Binding("escape", "clear_search",  "Clear", show=False),
+        Binding("q",      "quit",          "Quit"),
     ]
 
     _query: reactive[str] = reactive("")
@@ -500,6 +653,57 @@ class LoreApp(App):
         self.query_one(StatsPanel).update_stats(memories)
         self._stream_rows(memories)
         self._set_status(f"▸ ✓  [{entry['id']}] written → {entry['category']}/")
+
+    # ------------------------------------------------------------------
+    # Detail view  (Enter on row)
+    # ------------------------------------------------------------------
+
+    @on(DataTable.RowSelected)
+    def on_row_selected(self, event: DataTable.RowSelected) -> None:
+        mem_id = str(event.row_key.value) if event.row_key else None
+        if not mem_id:
+            return
+        memory = next((m for m in self._all_memories if m.get("id") == mem_id), None)
+        if memory:
+            self.push_screen(DetailScreen(memory))
+
+    # ------------------------------------------------------------------
+    # Edit memory  (u key)
+    # ------------------------------------------------------------------
+
+    def action_edit_memory(self) -> None:
+        table = self.query_one(self._TABLE, DataTable)
+        try:
+            row = table.get_row_at(table.cursor_row)
+        except Exception:
+            return
+        mem_id = str(row[0])
+        memory = next((m for m in self._all_memories if m.get("id") == mem_id), None)
+        if memory:
+            self.push_screen(EditMemoryScreen(memory), self._on_edit_result)
+
+    def _on_edit_result(self, result: dict | None) -> None:
+        if not result:
+            return
+        self._set_status("▸ updating…")
+        self._do_edit(result)
+
+    @work(thread=True)
+    def _do_edit(self, result: dict) -> None:
+        from .search import index_memory, remove_from_index
+        mem_id = result["id"]
+        remove_from_index(self._root, mem_id)
+        updated = update_memory(self._root, mem_id, {
+            "category": result["category"],
+            "content":  result["content"],
+            "tags":     result["tags"],
+        })
+        if updated:
+            index_memory(self._root, mem_id, result["content"])
+        memories = list_memories(self._root)
+        self.call_from_thread(self._populate, memories, False)
+        msg = f"▸ ✓  [{mem_id}] updated" if updated else f"▸ ✗  [{mem_id}] not found"
+        self.call_from_thread(self._set_status, msg)
 
     # ------------------------------------------------------------------
     # Delete memory
