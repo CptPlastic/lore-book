@@ -655,14 +655,16 @@ def list_cmd(
         return
 
     table = Table(show_header=True, header_style="bold magenta", expand=True)
+    table.add_column("#", style="dim", width=4, no_wrap=True)
     table.add_column("ID", style="dim", width=10, no_wrap=True)
-    table.add_column("Category", width=12, no_wrap=True)
+    table.add_column("Category", width=14, no_wrap=True)
     table.add_column("Content", min_width=20, overflow="fold")
     table.add_column("Tags", width=20, no_wrap=True)
     table.add_column("Created", width=19, no_wrap=True)
 
-    for m in memories:
+    for i, m in enumerate(memories, 1):
         table.add_row(
+            str(i),
             m.get("id", ""),
             m.get("category", ""),
             m.get("content", ""),
@@ -670,6 +672,7 @@ def list_cmd(
             m.get("created_at", "")[:19],
         )
     console.print(table)
+    console.print(f"  [dim]Use [bold]lore edit <#>[/bold] or [bold]lore edit <id>[/bold] to modify a spell.[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -734,8 +737,213 @@ def remove(
 
 
 # ---------------------------------------------------------------------------
-# mem extract
+# lore describe
 # ---------------------------------------------------------------------------
+
+@app.command()
+def describe(
+    text: Annotated[
+        Optional[str],
+        typer.Argument(help="One-line project description"),
+    ] = None,
+) -> None:
+    """Set the project description shown at the top of all lean instruction files."""
+    from .config import load_config, save_config
+    from rich.prompt import Prompt
+
+    root = _require_root()
+    cfg = load_config(root)
+
+    if text is None:
+        current = cfg.get("project_description", "").strip()
+        console.print()
+        if current:
+            console.print(f"  [dim]Current:[/dim] {current}")
+            console.print()
+        text = Prompt.ask(
+            f"  [bold {_P}]Project description[/bold {_P}] [dim](one line)[/dim]",
+            default=current or "",
+        )
+
+    text = text.strip()
+    if not text:
+        console.print("  [dim]No change.[/dim]")
+        return
+
+    cfg["project_description"] = text
+    save_config(root, cfg)
+    console.print(f"  [bold {_P}]✓[/bold {_P}]  Description set. Run [bold]lore export[/bold] to publish.")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# lore instructions
+# ---------------------------------------------------------------------------
+
+_VALID_TOOLS = ["all", "agents", "copilot", "cursor", "claude", "windsurf", "gemini", "cline", "aider"]
+
+@app.command("instructions")
+def instructions_cmd(
+    content: Annotated[
+        Optional[str],
+        typer.Argument(help="Directive for the AI tool(s)"),
+    ] = None,
+    tool: Annotated[
+        str,
+        typer.Option("--tool", "-t", help=f"Target tool tag: {', '.join(_VALID_TOOLS)}"),
+    ] = "all",
+) -> None:
+    """Add a tool-specific instruction spell (shortcut for `lore add instructions`)."""
+    from .store import add_memory
+    from .search import index_memory
+    from rich.prompt import Prompt
+
+    root = _require_root()
+
+    if tool not in _VALID_TOOLS:
+        err_console.print(f"[red]Unknown tool '{tool}'. Choose: {', '.join(_VALID_TOOLS)}[/red]")
+        raise typer.Exit(code=1)
+
+    if content is None:
+        console.print()
+        console.print(f"  [dim]This will add a directive to the [bold]instructions[/bold] tome, scoped to \"{tool}\".[/dim]")
+        console.print(f"  [dim]Tools tagged \"all\" appear in every lean instruction file.[/dim]")
+        console.print()
+        content = Prompt.ask(f"  [bold {_P}]Instruction[/bold {_P}]")
+        while not content.strip():
+            console.print(f"  [bold red]Content cannot be empty.[/bold red]")
+            content = Prompt.ask(f"  [bold {_P}]Instruction[/bold {_P}]")
+        console.print()
+
+    with console.status("Indexing…"):
+        entry = add_memory(root, "instructions", content.strip(), tags=[tool])
+        index_memory(root, entry["id"], content)
+
+    console.print(
+        f"  [bold {_P}]✓[/bold {_P}]  Saved [bold]{entry['id']}[/bold] "
+        f"→ [bold]instructions[/bold] [dim](scope: {tool})[/dim]"
+    )
+    console.print(f"  [dim]Run [bold]lore export[/bold] to publish to your AI tool files.[/dim]")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# lore edit
+# ---------------------------------------------------------------------------
+
+@app.command()
+def edit(
+    ref: Annotated[
+        Optional[str],
+        typer.Argument(help="Row number from `lore list` or memory ID prefix"),
+    ] = None,
+) -> None:
+    """Edit a memory — pick by row number or ID (interactive picker if no arg)."""
+    from .store import list_memories, update_memory
+    from .search import index_memory
+    from .config import load_config
+    from rich.prompt import Prompt, Confirm
+
+    root = _require_root()
+    memories = list_memories(root)
+    if not memories:
+        console.print("[yellow]No memories found.[/yellow]")
+        return
+
+    mem: dict | None = None
+
+    if ref is None:
+        # Interactive numbered picker
+        console.print()
+        table = Table(show_header=True, header_style=f"bold {_A}", expand=True)
+        table.add_column("#", style="dim", width=4, no_wrap=True)
+        table.add_column("ID", style="dim", width=10, no_wrap=True)
+        table.add_column("Category", width=14, no_wrap=True)
+        table.add_column("Content", min_width=20, overflow="fold")
+        table.add_column("Tags", width=20, no_wrap=True)
+        for i, m in enumerate(memories, 1):
+            table.add_row(
+                str(i),
+                m.get("id", ""),
+                m.get("category", ""),
+                m.get("content", ""),
+                ", ".join(m.get("tags", [])),
+            )
+        console.print(table)
+        console.print()
+        choice = Prompt.ask(f"  [bold {_P}]Which spell to edit?[/bold {_P}] [dim](#  or  id)[/dim]")
+        ref = choice.strip()
+
+    # Resolve by row number first, then ID prefix
+    if ref.isdigit():
+        idx = int(ref) - 1
+        if 0 <= idx < len(memories):
+            mem = memories[idx]
+        else:
+            err_console.print(f"[red]No spell at row {ref}.[/red]")
+            raise typer.Exit(code=1)
+    else:
+        matches = [m for m in memories if m.get("id", "").startswith(ref)]
+        if len(matches) == 1:
+            mem = matches[0]
+        elif len(matches) > 1:
+            err_console.print(f"[red]Ambiguous ID prefix '{ref}' — matches {len(matches)} spells. Use more characters.[/red]")
+            raise typer.Exit(code=1)
+        else:
+            err_console.print(f"[red]No spell found matching '{ref}'.[/red]")
+            raise typer.Exit(code=1)
+
+    # Pre-populated edit form
+    console.print()
+    console.print(Panel(
+        f"[bold {_A}]Editing spell [dim]{mem['id']}[/dim][/bold {_A}]",
+        border_style=_A, padding=(0, 2), style=f"on {_BG}",
+    ))
+    console.print()
+
+    cfg = load_config(root)
+    valid_cats = cfg.get("categories", [])
+    console.print(f"  [dim]Available categories:[/dim] {', '.join(valid_cats)}")
+    console.print()
+
+    new_category = Prompt.ask(
+        f"  [bold {_P}]Category[/bold {_P}]",
+        default=mem.get("category", "facts"),
+    )
+    console.print()
+    new_content = Prompt.ask(
+        f"  [bold {_P}]Content[/bold {_P}]",
+        default=mem.get("content", ""),
+    )
+    while not new_content.strip():
+        console.print(f"  [bold red]Content cannot be empty.[/bold red]")
+        new_content = Prompt.ask(f"  [bold {_P}]Content[/bold {_P}]")
+    console.print()
+    current_tags = ", ".join(mem.get("tags", []))
+    new_tags_input = Prompt.ask(
+        f"  [bold {_P}]Tags[/bold {_P}]",
+        default=current_tags,
+    )
+    new_tags = [t.strip() for t in new_tags_input.split(",") if t.strip()]
+    console.print()
+
+    confirmed = Confirm.ask(f"  [bold {_P}]Save changes?[/bold {_P}]", default=True)
+    if not confirmed:
+        console.print(f"  [dim]Cancelled — nothing was changed.[/dim]\n")
+        raise typer.Exit()
+
+    updates = {"category": new_category, "content": new_content, "tags": new_tags}
+    with console.status("Saving…"):
+        updated = update_memory(root, mem["id"], updates)
+        if updated:
+            index_memory(root, updated["id"], new_content)
+
+    if updated:
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  Saved [bold]{updated['id']}[/bold] → [bold]{new_category}[/bold]")
+    else:
+        err_console.print(f"[red]Update failed — spell not found.[/red]")
+        raise typer.Exit(code=1)
+    console.print()
 
 @app.command()
 def extract(
@@ -1256,6 +1464,27 @@ def doctor() -> None:
         console.print(f"  {warn}  SSL verify      : [bold red]disabled[/bold red]")
     else:
         console.print(f"  {ok}  SSL verify      : enabled")
+
+    # --- Spell counts + instructions nudge ---
+    console.print()
+    from .store import list_memories
+    all_mems = list_memories(root)
+    by_cat: dict[str, int] = {}
+    for m in all_mems:
+        cat = m.get("category", "?")
+        by_cat[cat] = by_cat.get(cat, 0) + 1
+    total = sum(by_cat.values())
+    if total:
+        counts = "  ".join(f"[dim]{c}[/dim] {n}" for c, n in sorted(by_cat.items()))
+        console.print(f"  {ok}  Spells ({total})    : {counts}")
+    else:
+        console.print(f"  {warn}  No spells stored yet. Run [bold]lore add[/bold] to capture your first memory.")
+    if not by_cat.get("instructions"):
+        console.print(
+            f"  {warn}  No [bold]instructions[/bold] spells — "
+            f"[{_AD}]these become per-tool directives in your AI files.[/{_AD}]\n"
+            f"       [{_AD}]→ run [bold {_P}]lore instructions[/bold {_P}] to add one[/{_AD}]"
+        )
 
     # --- Model availability ---
     console.print()

@@ -138,6 +138,10 @@ class DetailScreen(ModalScreen):
 class EditMemoryScreen(ModalScreen):
     """Edit an existing memory entry in-place."""
 
+    # Empty bindings so no app-level or sibling-modal bindings (e.g. space)
+    # leak through and steal keystrokes from focused Input widgets.
+    BINDINGS: ClassVar[list[Binding]] = []
+
     _CAT     = "#edit-cat"
     _CONTENT = "#edit-content"
     _TAGS    = "#edit-tags"
@@ -186,7 +190,26 @@ class EditMemoryScreen(ModalScreen):
                 yield Button("[[ SAVE  ]]", id="save")
 
     def on_mount(self) -> None:
-        self.query_one(self._CONTENT, Input).focus()
+        # call_after_refresh ensures focus sticks after Textual's internal
+        # focus management runs — plain .focus() in on_mount can be overwritten
+        # in Textual 8.x before the first render cycle completes.
+        self.call_after_refresh(self.query_one(self._CONTENT, Input).focus)
+
+    def on_key(self, event) -> None:
+        """Explicitly route space into the focused Input.
+
+        Textual 8.x routes keys through all screens in the stack, so the
+        underlying DataTable's space binding can intercept before the Input
+        widget sees the character.  This handler catches any space that
+        bubbled past the Input and inserts it directly.
+        """
+        if event.key == "space" and isinstance(self.focused, Input):
+            inp = self.focused
+            pos = inp.cursor_position
+            inp.value = inp.value[:pos] + " " + inp.value[pos:]
+            inp.cursor_position = pos + 1
+            event.prevent_default()
+            event.stop()
 
     @on(Button.Pressed, "#cancel")
     def cancel(self) -> None:
@@ -224,6 +247,18 @@ class EditMemoryScreen(ModalScreen):
 
 class AddMemoryScreen(ModalScreen):
     """Modal dialog to add a new memory."""
+
+    BINDINGS: ClassVar[list[Binding]] = []
+
+    def on_key(self, event) -> None:
+        """Explicitly route space into the focused Input (Textual 8.x workaround)."""
+        if event.key == "space" and isinstance(self.focused, Input):
+            inp = self.focused
+            pos = inp.cursor_position
+            inp.value = inp.value[:pos] + " " + inp.value[pos:]
+            inp.cursor_position = pos + 1
+            event.prevent_default()
+            event.stop()
 
     _CAT     = "#cat-input"
     _CONTENT = "#content-input"
@@ -271,7 +306,7 @@ class AddMemoryScreen(ModalScreen):
                 yield Button("[[ SAVE  ]]", id="save")
 
     def on_mount(self) -> None:
-        self.query_one(self._CAT, Input).focus()
+        self.call_after_refresh(self.query_one(self._CAT, Input).focus)
 
     @on(Button.Pressed, "#cancel")
     def cancel(self) -> None:

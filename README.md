@@ -19,7 +19,11 @@ Your decisions, facts, and lessons
         ↓  lore add / lore relic
   .lore/ (plain YAML)
         ↓  lore export
+  CHRONICLE.md  ←  full project memory (one source of truth)
+        ↓ referenced by lean instruction files:
   copilot-instructions.md · AGENTS.md · CLAUDE.md · .cursor/rules/memory.md
+        ↓ on-demand:
+  /lore  →  reads CHRONICLE.md into AI context when you ask
         ↓
   Every AI tool reads your repo context — without you repeating yourself
 ```
@@ -54,16 +58,34 @@ A relic can be anything: a pasted session log, a git diff, a doc excerpt from Co
 
 ### Export *(the chronicle)*
 
-`lore export` writes all your spells into the files AI tools pick up automatically:
+`lore export` writes your spells into the files AI tools pick up automatically, using a **two-layer architecture**:
 
-| File | Tool |
-|---|---|
-| `.github/copilot-instructions.md` | GitHub Copilot |
-| `AGENTS.md` | OpenAI Codex, agent frameworks |
-| `CLAUDE.md` | Anthropic Claude |
-| `.cursor/rules/memory.md` | Cursor |
+**`CHRONICLE.md`** — the single source of truth. Contains every spell grouped by tome. All lean instruction files reference it.
 
-Each file gets a security preamble first (if configured), then all your spells, grouped by tome. Exports are atomic — a crash mid-write never leaves a partial file.
+| Lean instruction file | Tool | On by default |
+|---|---|:---:|
+| `CHRONICLE.md` | All tools (full memory) | ✅ |
+| `.github/copilot-instructions.md` | GitHub Copilot | ✅ |
+| `AGENTS.md` | OpenAI Codex, agent frameworks | ✅ |
+| `CLAUDE.md` | Anthropic Claude | ✅ |
+| `.cursor/rules/memory.md` | Cursor | ✅ |
+| `.github/prompts/lore.prompt.md` | `/lore` trigger in Copilot Chat | ✅ |
+| `.windsurfrules` | Windsurf / Codeium | opt-in |
+| `GEMINI.md` | Gemini CLI | opt-in |
+| `.clinerules` | Cline | opt-in |
+| `CONVENTIONS.md` | Aider | opt-in |
+
+Lean instruction files are intentionally small — they contain your project description, security preamble, and a single line telling the AI to read `CHRONICLE.md` for full context. This keeps per-request token overhead minimal.
+
+To enable opt-in targets, set them in `.lore/config.yaml`:
+
+```yaml
+export_targets:
+  cline: true
+  aider: true
+```
+
+Exports are atomic — a crash mid-write never leaves a partial file.
 
 ---
 
@@ -89,7 +111,7 @@ pip install -e .
 lore onboard
 ```
 
-The onboarding command explains every concept, walks you through store setup, security policy, your first spell, and publishing — with an interactive step-by-step flow. Start here if you're new.
+The onboarding command explains every concept, walks you through store setup, security policy, your first spell, and publishing — with an interactive step-by-step flow. It also prompts for a **project description** (auto-detected from `pyproject.toml` or README) that appears at the top of every lean instruction file. Start here if you're new.
 
 ---
 
@@ -181,17 +203,29 @@ Each spell links back to its source relic. The tome selection is sticky — afte
 ## Exporting AI context files
 
 ```sh
-# Write all AI context files
+# Write all AI context files (CHRONICLE.md + all enabled lean files)
 lore export
 
 # Write one target only
+lore export --format chronicle
 lore export --format copilot
 lore export --format agents
 lore export --format claude
 lore export --format cursor
+lore export --format prompt    # .github/prompts/lore.prompt.md
+lore export --format windsurf  # requires: windsurf: true in .lore/config.yaml
+lore export --format gemini
+lore export --format cline
+lore export --format aider
 ```
 
+If no `project_description` is set, `lore export` will remind you to run `lore onboard` — lean instruction files are more useful with a one-line project summary at the top.
+
 Exports are regenerated every run and are safe to commit. The git hook can automate this on every commit (see below).
+
+### The `/lore` trigger
+
+The `prompt` export target writes `.github/prompts/lore.prompt.md`. In GitHub Copilot Chat, type `/lore` to invoke it — the AI will read `CHRONICLE.md` and surface context relevant to your current task. No setup beyond running `lore export`.
 
 ---
 
@@ -330,7 +364,7 @@ Run `lore doctor` to confirm the model downloads and loads from your endpoint.
 | `search` | `<query>` | Semantic search across all spells |
 | `remove` | `<id>` | Delete a spell |
 | `extract` | `[--last N]` | Pull spells from git commit messages |
-| `export` | `[--format F]` | Write AI context files |
+| `export` | `[--format F]` | Write AI context files (`chronicle`, `agents`, `copilot`, `cursor`, `claude`, `prompt`, `windsurf`, `gemini`, `cline`, `aider`, `all`) |
 | `config` | `<key> <value>` | Set a config value |
 | `security` | | Configure the security preamble for exports |
 | `doctor` | | Store + model health report |

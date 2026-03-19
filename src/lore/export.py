@@ -95,10 +95,46 @@ def _render_security_preamble(config: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_lean_body(config: dict, root: Path) -> str:
+# Maps export target name → tag(s) an instructions spell must carry to appear in that file.
+# A spell tagged 'all' appears in every lean file.
+_TOOL_TAGS: dict[str, str] = {
+    "agents":   "agents",
+    "copilot":  "copilot",
+    "cursor":   "cursor",
+    "claude":   "claude",
+    "windsurf": "windsurf",
+    "gemini":   "gemini",
+    "cline":    "cline",
+    "aider":    "aider",
+}
+
+
+def _render_instructions(root: Path, tool: str) -> str:
+    """Return Markdown for instructions spells scoped to *tool* (or tagged 'all')."""
+    memories = list_memories(root, "instructions")
+    if not memories:
+        return ""
+
+    tool_tag = _TOOL_TAGS.get(tool, tool)
+    relevant = [
+        m for m in memories
+        if "all" in m.get("tags", []) or tool_tag in m.get("tags", [])
+    ]
+    if not relevant:
+        return ""
+
+    lines = ["## Instructions\n"]
+    for m in relevant:
+        lines.append(f"- {m['content']}")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _render_lean_body(config: dict, root: Path, tool: str = "") -> str:
     """Shared content for all lean AI instruction files.
 
-    Contains: project description, /lore hint, repo context, security preamble.
+    Contains: project description, tool-specific instructions, /lore hint,
+    repo context, security preamble.
     Full memories live in CHRONICLE.md — the fat memory file.
     """
     body = ""
@@ -106,6 +142,11 @@ def _render_lean_body(config: dict, root: Path) -> str:
     desc = config.get("project_description", "").strip()
     if desc:
         body += f"{desc}\n\n"
+
+    if tool:
+        instructions = _render_instructions(root, tool)
+        if instructions:
+            body += instructions + "\n"
 
     body += (
         "For full project memory, read **CHRONICLE.md** in the project root.  \n"
@@ -124,7 +165,11 @@ def _render_lean_body(config: dict, root: Path) -> str:
 
 
 def _render_memories_markdown(root: Path) -> str:
-    """Return all memories formatted as grouped Markdown."""
+    """Return all memories formatted as grouped Markdown for CHRONICLE.md.
+
+    Instructions are rendered first (without tag decoration) so they read as
+    clean directives, followed by all other tomes in alphabetical order.
+    """
     memories = list_memories(root)
     if not memories:
         return "_No memories stored yet._\n"
@@ -134,7 +179,20 @@ def _render_memories_markdown(root: Path) -> str:
         by_cat[m.get("category", "facts")].append(m)
 
     lines: list[str] = []
+
+    # Instructions first — render without tag noise, note the scoped tool
+    if "instructions" in by_cat:
+        lines.append("## Instructions\n")
+        for e in by_cat["instructions"]:
+            content = e.get("content", "")
+            tags = [t for t in e.get("tags", []) if t not in ("all",)]
+            scope = f" _(scope: {', '.join(tags)})_" if tags else " _(scope: all)_"
+            lines.append(f"- {content}{scope}")
+        lines.append("")
+
     for cat in sorted(by_cat):
+        if cat == "instructions":
+            continue  # already rendered above
         lines.append(f"## {cat.capitalize()}\n")
         for e in by_cat[cat]:
             content = e.get("content", "")
@@ -192,7 +250,7 @@ def export_agents_md(root: Path, out: Path | None = None) -> Path:
         "# Agent Instructions\n\n"
         + _HEADER.format(date=_datestamp())
         + "\n"
-        + _render_lean_body(config, root)
+        + _render_lean_body(config, root, tool="agents")
     )
     return dest
 
@@ -207,7 +265,7 @@ def export_copilot(root: Path, out: Path | None = None) -> Path:
         "# Copilot Instructions\n\n"
         + _HEADER.format(date=_datestamp())
         + "\n"
-        + _render_lean_body(config, root)
+        + _render_lean_body(config, root, tool="copilot")
     )
     return dest
 
@@ -221,7 +279,7 @@ def export_cursor(root: Path, out: Path | None = None) -> Path:
         "# Project Instructions\n\n"
         + _HEADER.format(date=_datestamp())
         + "\n"
-        + _render_lean_body(config, root)
+        + _render_lean_body(config, root, tool="cursor")
     )
     return dest
 
@@ -235,7 +293,7 @@ def export_claude(root: Path, out: Path | None = None) -> Path:
         "# Claude Instructions\n\n"
         + _HEADER.format(date=_datestamp())
         + "\n"
-        + _render_lean_body(config, root)
+        + _render_lean_body(config, root, tool="claude")
     )
     return dest
 
@@ -249,7 +307,7 @@ def export_windsurf(root: Path, out: Path | None = None) -> Path:
         "# Windsurf Rules\n\n"
         + _HEADER.format(date=_datestamp())
         + "\n"
-        + _render_lean_body(config, root)
+        + _render_lean_body(config, root, tool="windsurf")
     )
     return dest
 
@@ -263,7 +321,7 @@ def export_gemini(root: Path, out: Path | None = None) -> Path:
         "# Gemini Instructions\n\n"
         + _HEADER.format(date=_datestamp())
         + "\n"
-        + _render_lean_body(config, root)
+        + _render_lean_body(config, root, tool="gemini")
     )
     return dest
 
@@ -277,7 +335,7 @@ def export_cline(root: Path, out: Path | None = None) -> Path:
         "# Cline Rules\n\n"
         + _HEADER.format(date=_datestamp())
         + "\n"
-        + _render_lean_body(config, root)
+        + _render_lean_body(config, root, tool="cline")
     )
     return dest
 
@@ -291,7 +349,7 @@ def export_aider(root: Path, out: Path | None = None) -> Path:
         "# Conventions\n\n"
         + _HEADER.format(date=_datestamp())
         + "\n"
-        + _render_lean_body(config, root)
+        + _render_lean_body(config, root, tool="aider")
     )
     return dest
 

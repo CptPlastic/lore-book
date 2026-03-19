@@ -12,7 +12,7 @@ CONFIG_FILE = "config.yaml"
 DEFAULT_CONFIG: dict[str, Any] = {
     "version": 1,
     "project_description": "",
-    "categories": ["decisions", "facts", "preferences", "summaries"],
+    "categories": ["decisions", "facts", "instructions", "preferences", "summaries"],
     "export_targets": {
         "chronicle": True,   # full memory file — lean instruction files reference this
         "agents":    True,
