@@ -84,52 +84,92 @@ console     = Console(color_system=_color_system, force_terminal=_force_color)
 err_console = Console(stderr=True, color_system=_color_system, force_terminal=_force_color)
 
 
+_CORE_ROWS = [
+    ("onboard",  "",                        "📜  new here? begin the chronicle setup"),
+    ("add",      "\\[category] \\[content]",  "inscribe a new memory into the spellbook"),
+    ("search",   "<query>",                 "seek knowledge across all memories"),
+    ("export",   "\\[--format]",              "publish the chronicle to AI context files"),
+    ("relic",    "capture|list|distill …",  "🏺  capture artifacts, distill into spells"),
+    ("ui",       "",                        "open the interactive terminal grimoire"),
+]
+
+_MORE_ROWS = [
+    ("list",          "\\[category]",             "list memories, optionally by tome"),
+    ("remove",        "<id>",                   "delete a memory by its ID"),
+    ("extract",       "\\[--last N]",             "pull memories from recent git commits"),
+    ("init",          "\\[path]",                 "create a .lore store in a directory"),
+    ("doctor",        "",                        "check store, model, and search status"),
+    ("awaken",        "\\[--background]",         "👁  watch .lore and auto-export on change"),
+    ("slumber",       "",                        "banish the background daemon"),
+    ("config",        "<key> <value>",           "set a config value"),
+    ("security",      "",                        "configure security guidelines for exports"),
+    ("hook",          "install|uninstall",       "manage the post-commit git hook"),
+    ("index",         "rebuild",                 "rebuild the semantic search index"),
+    ("version",       "\\[--check]",              "show version; --check queries PyPI"),
+]
+
+
+def _build_table(rows: list[tuple[str, str, str]]) -> Table:
+    t = Table(box=box.SIMPLE, show_header=True, header_style=f"bold {_A}",
+              show_edge=False, padding=(0, 1), expand=False)
+    t.add_column("SPELL",       style=f"bold {_P}", no_wrap=True, min_width=12)
+    t.add_column("ARGS",        style=_PD,          no_wrap=True, min_width=20)
+    t.add_column("EFFECT",      style=f"{_P}")
+    for cmd, args, desc in rows:
+        t.add_row(cmd, args, desc)
+    return t
+
+
 @app.callback(invoke_without_command=True)
-def _root(ctx: typer.Context) -> None:
+def _root(
+    ctx: typer.Context,
+    show_all: Annotated[
+        bool,
+        typer.Option("--all", help="Reveal the full grimoire of spells."),
+    ] = False,
+) -> None:
     """Show help when lore is run with no subcommand."""
     if ctx.invoked_subcommand is not None:
         return
+
     console.print()
     console.print(f"  {_BANNER_TEXT}")
     console.print()
 
-    t = Table(box=box.SIMPLE, show_header=True, header_style=f"bold {_A}",
-              show_edge=False, padding=(0, 1), expand=False)
-    t.add_column("COMMAND",     style=f"bold {_P}", no_wrap=True, min_width=14)
-    t.add_column("ARGS",        style=_PD,          no_wrap=True, min_width=22)
-    t.add_column("DESCRIPTION", style=f"{_P}")
+    if show_all:
+        console.print(f"  [{_AD}]── full grimoire ──────────────────────────────────[/{_AD}]")
+        console.print()
+        console.print(_build_table(_CORE_ROWS + _MORE_ROWS))
+        console.print(f"  [{_AD}]Run [bold]lore <spell> --help[/bold] for detailed options.[/{_AD}]")
+    else:
+        console.print(_build_table(_CORE_ROWS))
+        console.print(
+            f"  [{_AD}]Run [bold]lore --all[/bold] to reveal the full grimoire · "
+            f"[bold]lore <spell> --help[/bold] for details.[/{_AD}]"
+        )
 
-    rows = [
-        ("version",        "[--check]",               "Show version; --check queries PyPI for updates"),
-        ("onboard",       "",                        "📜  New here? Start the guided chronicle setup"),
-        ("init",          "\\[path]",                  "Create a .lore store in a directory"),
-        ("add",           "\\[category] \\[content]",  "Store a new memory entry (interactive if no args)"),
-        ("list",          "\\[category]",              "List memories, optionally filtered by category"),
-        ("search",        "<query>",                 "Semantic search across all memories"),
-        ("remove",        "<id>",                    "Delete a memory by its ID"),
-        ("extract",       "\\[--last N]",              "Pull memories from recent git commits"),
-        ("export",        "\\[--format]",              "Write AI context files (AGENTS.md, copilot, cursor, claude)"),
-        ("config",        "<key> <value>",           "Set a config value (model_endpoint, ssl_verify, …)"),
-        ("security",      "",                        "Configure security guidelines for AI context exports"),
-        ("doctor",        "",                        "Check store, model, and search mode status"),
-        ("hook install",    "",                        "Install a post-commit git hook to auto-extract memories"),
-        ("hook uninstall",  "",                        "Remove the lore-managed post-commit hook"),
-        ("index rebuild",   "",                        "Rebuild the semantic search index from scratch"),
-        ("ui",            "",                        "Open the interactive terminal UI"),
-        ("awaken",        "[--background]",          "👁  Watch .lore and auto-export on every change"),
-        ("slumber",       "",                        "Banish the background spellbook daemon"),
-        ("relic capture", "[--file F] [--git-diff] [--git-log N] [--clipboard] [--stdin]",  "🏺  Capture a session, doc, or diff as a relic"),
-        ("relic list",    "",                        "List all relics in the spellbook"),
-        ("relic distill", "<id>",                    "Extract spells (memories) from a relic"),
-        ("relic view",    "<id>",                    "View the full content of a relic"),
-        ("relic remove",  "<id>",                    "Permanently destroy a relic"),
-    ]
-    for cmd, args, desc in rows:
-        t.add_row(cmd, args, desc)
-
-    console.print(t)
-    console.print(f"  [{_AD}]Run [bold]lore <command> --help[/bold] for detailed options.[/{_AD}]")
     console.print()
+
+    # Background update check — non-blocking, silent on error or up-to-date.
+    def _check_update() -> None:
+        try:
+            import urllib.request
+            import json as _json
+            with urllib.request.urlopen(  # noqa: S310
+                "https://pypi.org/pypi/lore-book/json", timeout=3
+            ) as resp:
+                latest = _json.loads(resp.read())["info"]["version"]
+            if latest != __version__:
+                console.print(
+                    f"  [{_A}]✦  Update available:[/{_A}] [bold]{latest}[/bold]"
+                    f"  [dim](you have {__version__})[/dim]\n"
+                    f"  [dim]  pip3 install --upgrade lore-book[/dim]\n"
+                )
+        except Exception:
+            pass
+
+    import threading as _threading
+    _threading.Thread(target=_check_update, daemon=True).start()
 
 
 def _require_root() -> Path:
