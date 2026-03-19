@@ -24,7 +24,7 @@ _AD = "#996600"   # dim amber
 _BG = "#080c08"
 _BD = "#1a6606"   # border
 
-_BANNER_TEXT = f"[bold {_A}]L · O · R · E   -   AI  PROJECT  MEMORY[/bold {_A}]  [dim]v{__version__}[/dim]"
+_BANNER_TEXT = f"[bold {_A}]L · O · R · E   -   AI  PROJECT  MEMORY   v{__version__}[/bold {_A}]"
 
 # Force truecolor so VS Code's integrated terminal and other 256-color
 # terminals don't degrade hex palette colors to ugly approximations.
@@ -235,6 +235,34 @@ def init(
     )
 
 
+def _detect_project_description(root: Path) -> str:
+    """Auto-detect a one-line project description from pyproject.toml or README."""
+    import re
+
+    pyproject = root / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            text = pyproject.read_text()
+            m = re.search(r'^description\s*=\s*["\'](.+?)["\']', text, re.MULTILINE)
+            if m:
+                return m.group(1).strip()
+        except Exception:
+            pass
+
+    for readme in ("README.md", "README.rst", "README.txt", "README"):
+        p = root / readme
+        if p.exists():
+            try:
+                for line in p.read_text().splitlines():
+                    line = line.strip()
+                    if line and not line.startswith(("#", "!", "<", "[", ">")) and len(line) >= 15:
+                        return line[:140]
+            except Exception:
+                pass
+
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # lore onboard
 # ---------------------------------------------------------------------------
@@ -343,6 +371,24 @@ def onboard() -> None:
         _beat(f"  [dim]The gates have been hidden from git's eye.[/dim]")
 
     cfg = load_config(root)
+
+    # ── Project description ───────────────────────────────────────────────────
+    existing_desc = cfg.get("project_description", "").strip()
+    if not existing_desc:
+        console.print()
+        _beat(f"  [dim]A brief description helps AI tools understand this project at a glance.[/dim]")
+        console.print()
+        detected = _detect_project_description(root)
+        proj_desc = Prompt.ask(
+            f"  [bold {_P}]Project description[/bold {_P}] [dim](one line, optional)[/dim]",
+            default=detected,
+        )
+        if proj_desc.strip():
+            cfg["project_description"] = proj_desc.strip()
+            save_config(root, cfg)
+            _beat(f"  [bold {_P}]✓[/bold {_P}]  Inscribed: [dim]{proj_desc[:72]}[/dim]")
+    else:
+        _beat(f"  [bold {_P}]✓[/bold {_P}]  Project: [dim]{existing_desc[:72]}[/dim]")
 
     # ── Chapter II — Inscribe a Law ──────────────────────────────────────────
     _chapter(2, "Inscribe a Law")
@@ -785,6 +831,16 @@ def export(
     for p in paths:
         rel = p.relative_to(root)
         console.print(f"[green]Wrote[/green] {rel}")
+
+    from .config import load_config
+    cfg = load_config(root)
+    if not cfg.get("project_description", "").strip():
+        console.print(
+            f"\n[{_A}]Tip:[/{_A}] No project description set — "
+            "lean instruction files will lack a project summary.\n"
+            f"  Run [bold]lore onboard[/bold] or add "
+            f"[bold]project_description[/bold] to [dim].lore/config.yaml[/dim]."
+        )
 
 
 # ---------------------------------------------------------------------------
