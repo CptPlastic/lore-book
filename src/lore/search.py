@@ -12,8 +12,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from .config import memory_dir, load_config
 from .store import list_memories
 
@@ -91,19 +89,28 @@ def _tokenize(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", text.lower())
 
 
-def _tfidf_vector(text: str, idf: dict[str, float]) -> np.ndarray:
+def _l2_norm(vec: list[float]) -> float:
+    return math.sqrt(sum(v * v for v in vec))
+
+
+def _normalize(vec: list[float]) -> list[float]:
+    norm = _l2_norm(vec)
+    return [v / norm for v in vec] if norm > 0 else vec
+
+
+def _dot(a: list[float], b: list[float]) -> float:
+    return sum(x * y for x, y in zip(a, b))
+
+
+def _tfidf_vector(text: str, idf: dict[str, float]) -> list[float]:
     tokens = _tokenize(text)
     tf: dict[str, float] = {}
     for t in tokens:
         tf[t] = tf.get(t, 0) + 1
     total = max(len(tokens), 1)
     vocab = list(idf)
-    vec = np.array(
-        [tf.get(w, 0) / total * idf.get(w, 0.0) for w in vocab],
-        dtype=np.float32,
-    )
-    norm = np.linalg.norm(vec)
-    return vec / norm if norm > 0 else vec
+    vec = [tf.get(w, 0) / total * idf.get(w, 0.0) for w in vocab]
+    return _normalize(vec)
 
 
 def _build_idf(corpus: list[str]) -> dict[str, float]:
@@ -242,13 +249,11 @@ def search(root: Path, query: str, top_k: int = 5) -> list[dict[str, Any]]:
     # If the index doesn't exist yet, build a transient one on the fly
     if not index:
         if model is not None:
-            q_vec = np.array(
-                model.encode(query, normalize_embeddings=True), dtype=np.float32
-            )
+            q_vec = list(model.encode(query, normalize_embeddings=True))
             texts = [m["content"] for m in memories]
             vecs = model.encode(texts, normalize_embeddings=True, batch_size=32, show_progress_bar=False)
             scored: list[tuple[float, str]] = [
-                (float(np.dot(q_vec, np.array(v, dtype=np.float32))), m["id"])
+                (_dot(q_vec, list(v)), m["id"])
                 for m, v in zip(memories, vecs)
             ]
         else:
@@ -258,13 +263,11 @@ def search(root: Path, query: str, top_k: int = 5) -> list[dict[str, Any]]:
             scored = []
             for mem in memories:
                 v = _tfidf_vector(mem["content"], idf)
-                score = float(np.dot(q_vec, v))
+                score = _dot(q_vec, v)
                 scored.append((score, mem["id"]))
     else:
         if model is not None:
-            q_vec = np.array(
-                model.encode(query, normalize_embeddings=True), dtype=np.float32
-            )
+            q_vec = list(model.encode(query, normalize_embeddings=True))
         else:
             corpus = [m["content"] for m in memories] + [query]
             idf = _build_idf(corpus)
@@ -272,8 +275,8 @@ def search(root: Path, query: str, top_k: int = 5) -> list[dict[str, Any]]:
 
         scored = []
         for entry in index:
-            v = np.array(entry["vector"], dtype=np.float32)
-            score = float(np.dot(q_vec, v))
+            v = entry["vector"]
+            score = _dot(q_vec, v)
             scored.append((score, entry["id"]))
 
     scored.sort(reverse=True)

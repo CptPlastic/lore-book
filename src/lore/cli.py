@@ -1072,16 +1072,13 @@ def doctor() -> None:
         raise SystemExit(1)
 
     # --- Config values ---
-    endpoint   = cfg.get("model_endpoint")
+    endpoint   = cfg.get("model_endpoint") or "https://huggingface.co"
     ssl_verify = cfg.get("model_ssl_verify", True)
     model_name = cfg.get("embedding_model", "all-MiniLM-L6-v2")
     console.print(f"  {ok}  Embedding model : [bold]{model_name}[/bold]")
-    if endpoint:
-        console.print(f"  {ok}  Model endpoint  : [bold]{endpoint}[/bold]")
-    else:
-        console.print(f"  {warn}  Model endpoint  : [dim]not set (using huggingface.co directly)[/dim]")
-        console.print(f"       [{_AD}]→ If behind a proxy run:[/{_AD}] "
-                      f"[bold {_P}]lore config model_endpoint <url>[/bold {_P}]")
+    console.print(f"  {ok}  Model endpoint  : [bold]{endpoint}[/bold]")
+    console.print(f"       [{_AD}]→ If behind a proxy run:[/{_AD}] "
+                  f"[bold {_P}]lore config model_endpoint <url>[/bold {_P}]")
     if not ssl_verify:
         console.print(f"  {warn}  SSL verify      : [bold red]disabled[/bold red]")
     else:

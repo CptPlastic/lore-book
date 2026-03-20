@@ -79,7 +79,7 @@ For local development:
 pip install -e .
 ```
 
-**Requirements:** Python 3.10+. Semantic search uses `sentence-transformers` (downloaded once, ~80 MB). If the model is unavailable, a TF-IDF fallback kicks in automatically — no configuration needed.
+**Requirements:** Python 3.10+. Semantic search uses `sentence-transformers` (downloaded once, ~80 MB) from the default Hugging Face endpoint (`https://huggingface.co`). If the model is unavailable, a TF-IDF fallback kicks in automatically — no configuration needed.
 
 ---
 
@@ -308,7 +308,7 @@ Reports:
 
 ## Corporate proxy / Artifactory
 
-If you're behind a ZScaler proxy or using an internal HuggingFace mirror:
+By default Lore downloads models from `https://huggingface.co`. If you're behind a ZScaler proxy or using an internal HuggingFace mirror:
 
 ```sh
 lore config model_endpoint https://artifactory.example.com/artifactory/api/huggingfaceml/huggingface

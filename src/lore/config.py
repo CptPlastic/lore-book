@@ -19,11 +19,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "claude": True,
     },
     "embedding_model": "all-MiniLM-L6-v2",
-    # Override to point at Artifactory or any HuggingFace-compatible mirror:
+    # Default to the public Hugging Face Hub.
+    # Override to point at Artifactory or any HuggingFace-compatible mirror.
+    # Example:
     #   model_endpoint: "https://artifactory.example.com/huggingface"
+    "model_endpoint": "https://huggingface.co",
     # Set to false to skip SSL verification (not recommended for prod):
     #   model_ssl_verify: false
-    "model_endpoint": None,
     "model_ssl_verify": True,
     # Security preamble injected into all AI context file exports:
     "security": {
