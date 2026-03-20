@@ -64,6 +64,10 @@ def add_memory(
     cat_dir = memory_dir(root) / category
     cat_dir.mkdir(exist_ok=True)
 
+    # Capture git context at write time (branch + author) — silently skipped if not a git repo
+    from .extract import git_context
+    gctx = git_context(root)
+
     mem_id = _short_id()
     now = datetime.now(timezone.utc)
     entry: dict[str, Any] = {
@@ -74,6 +78,10 @@ def add_memory(
         "source": source,
         "created_at": now.isoformat(),
     }
+    if gctx.get("branch"):
+        entry["git_branch"] = gctx["branch"]
+    if gctx.get("author"):
+        entry["git_author"] = gctx["author"]
     filename = f"{now.strftime('%Y%m%d%H%M%S')}_{mem_id}.yaml"
     path = cat_dir / filename
     with path.open("w") as f:
@@ -113,3 +121,57 @@ def remove_memory(root: Path, mem_id: str) -> bool:
             _yaml_cache.pop(matches[0], None)
             return True
     return False
+
+
+def update_memory(root: Path, mem_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+    """Update fields of a memory in-place. Returns the updated entry or None if not found.
+
+    If 'category' changes, the YAML file is moved to the new category directory.
+    """
+    mem = memory_dir(root)
+    config = load_config(root)
+
+    # Find the file across all category dirs
+    found_path: Path | None = None
+    for cat in config.get("categories", []):
+        cat_dir = mem / cat
+        if not cat_dir.is_dir():
+            continue
+        matches = list(cat_dir.glob(f"*_{mem_id}.yaml"))
+        if matches:
+            found_path = matches[0]
+            break
+
+    if found_path is None:
+        return None
+
+    with found_path.open() as f:
+        entry = yaml.safe_load(f)
+    if not entry:
+        return None
+
+    old_category = entry.get("category", "")
+    new_category = updates.get("category", old_category)
+
+    # Apply updates (exclude internal helper keys)
+    for k, v in updates.items():
+        entry[k] = v
+
+    # Move file if category changed
+    if new_category != old_category:
+        new_cat_dir = mem / new_category
+        new_cat_dir.mkdir(exist_ok=True)
+        cats = config.get("categories", [])
+        if new_category not in cats:
+            cats.append(new_category)
+            config["categories"] = cats
+            save_config(root, config)
+        new_path = new_cat_dir / found_path.name
+        _yaml_cache.pop(found_path, None)
+        found_path.rename(new_path)
+        found_path = new_path
+
+    with found_path.open("w") as f:
+        yaml.dump(entry, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    _yaml_cache.pop(found_path, None)
+    return entry

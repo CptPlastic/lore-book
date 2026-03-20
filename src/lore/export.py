@@ -30,6 +30,28 @@ _OWASP_ITEMS = [
 ]
 
 
+def _render_repo_context(root: Path) -> str:
+    """Build a Markdown repository context block from live git metadata."""
+    try:
+        from .extract import git_context
+        ctx = git_context(root)
+    except Exception:
+        ctx = {}
+    if not ctx:
+        return ""
+
+    lines: list[str] = ["## Repository\n"]
+    if ctx.get("remote_name"):
+        lines.append(f"- **Project**: {ctx['remote_name']}")
+    if ctx.get("branch"):
+        lines.append(f"- **Branch**: `{ctx['branch']}`")
+    if ctx.get("last_sha") and ctx.get("last_msg"):
+        short_msg = ctx["last_msg"][:72]
+        lines.append(f"- **Last commit**: `{ctx['last_sha']}` — {short_msg}")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
 def _render_security_preamble(config: dict) -> str:
     """Build a Markdown security guidelines section from config."""
     sec = config.get("security", {})
@@ -73,8 +95,81 @@ def _render_security_preamble(config: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+# Maps export target name → tag(s) an instructions spell must carry to appear in that file.
+# A spell tagged 'all' appears in every lean file.
+_TOOL_TAGS: dict[str, str] = {
+    "agents":   "agents",
+    "copilot":  "copilot",
+    "cursor":   "cursor",
+    "claude":   "claude",
+    "windsurf": "windsurf",
+    "gemini":   "gemini",
+    "cline":    "cline",
+    "aider":    "aider",
+}
+
+
+def _render_instructions(root: Path, tool: str) -> str:
+    """Return Markdown for instructions spells scoped to *tool* (or tagged 'all')."""
+    memories = list_memories(root, "instructions")
+    if not memories:
+        return ""
+
+    tool_tag = _TOOL_TAGS.get(tool, tool)
+    relevant = [
+        m for m in memories
+        if "all" in m.get("tags", []) or tool_tag in m.get("tags", [])
+    ]
+    if not relevant:
+        return ""
+
+    lines = ["## Instructions\n"]
+    for m in relevant:
+        lines.append(f"- {m['content']}")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _render_lean_body(config: dict, root: Path, tool: str = "") -> str:
+    """Shared content for all lean AI instruction files.
+
+    Contains: project description, tool-specific instructions, /lore hint,
+    repo context, security preamble.
+    Full memories live in CHRONICLE.md — the fat memory file.
+    """
+    body = ""
+
+    desc = config.get("project_description", "").strip()
+    if desc:
+        body += f"{desc}\n\n"
+
+    if tool:
+        instructions = _render_instructions(root, tool)
+        if instructions:
+            body += instructions + "\n"
+
+    body += (
+        "For full project memory, read **CHRONICLE.md** in the project root.  \n"
+        "When the user types `/lore`, read CHRONICLE.md before responding.\n"
+    )
+
+    repo = _render_repo_context(root)
+    if repo:
+        body += f"\n{repo}"
+
+    security = _render_security_preamble(config)
+    if security:
+        body += f"\n{security}"
+
+    return body
+
+
 def _render_memories_markdown(root: Path) -> str:
-    """Return all memories formatted as grouped Markdown."""
+    """Return all memories formatted as grouped Markdown for CHRONICLE.md.
+
+    Instructions are rendered first (without tag decoration) so they read as
+    clean directives, followed by all other tomes in alphabetical order.
+    """
     memories = list_memories(root)
     if not memories:
         return "_No memories stored yet._\n"
@@ -84,7 +179,20 @@ def _render_memories_markdown(root: Path) -> str:
         by_cat[m.get("category", "facts")].append(m)
 
     lines: list[str] = []
+
+    # Instructions first — render without tag noise, note the scoped tool
+    if "instructions" in by_cat:
+        lines.append("## Instructions\n")
+        for e in by_cat["instructions"]:
+            content = e.get("content", "")
+            tags = [t for t in e.get("tags", []) if t not in ("all",)]
+            scope = f" _(scope: {', '.join(tags)})_" if tags else " _(scope: all)_"
+            lines.append(f"- {content}{scope}")
+        lines.append("")
+
     for cat in sorted(by_cat):
+        if cat == "instructions":
+            continue  # already rendered above
         lines.append(f"## {cat.capitalize()}\n")
         for e in by_cat[cat]:
             content = e.get("content", "")
@@ -118,72 +226,165 @@ def _atomic_write(dest: Path, content: str) -> None:
         raise
 
 
-def export_agents_md(root: Path, out: Path | None = None) -> Path:
-    config = load_config(root)
+def export_chronicle(root: Path, out: Path | None = None) -> Path:
+    """Write CHRONICLE.md — the full project memory file referenced by lean instruction files."""
     body = _render_memories_markdown(root)
-    security = _render_security_preamble(config)
-    dest = out or (root / "AGENTS.md")
+    dest = out or (root / "CHRONICLE.md")
     _atomic_write(
         dest,
-        "# Agent Memory\n\n"
+        "# Chronicle\n\n"
+        "> Auto-generated by `lore export`. Full project memory — "
+        "load this file when you need deep context.\n\n"
         + _HEADER.format(date=_datestamp())
-        + (f"\n{security}" if security else "")
         + f"\n{body}"
     )
     return dest
 
 
-def export_copilot(root: Path, out: Path | None = None) -> Path:
+def export_agents_md(root: Path, out: Path | None = None) -> Path:
+    """Write lean AGENTS.md — references CHRONICLE.md for full memory."""
     config = load_config(root)
-    body = _render_memories_markdown(root)
-    security = _render_security_preamble(config)
+    dest = out or (root / "AGENTS.md")
+    _atomic_write(
+        dest,
+        "# Agent Instructions\n\n"
+        + _HEADER.format(date=_datestamp())
+        + "\n"
+        + _render_lean_body(config, root, tool="agents")
+    )
+    return dest
+
+
+def export_copilot(root: Path, out: Path | None = None) -> Path:
+    """Write lean .github/copilot-instructions.md — references CHRONICLE.md."""
+    config = load_config(root)
     dest = out or (root / ".github" / "copilot-instructions.md")
     _atomic_write(
         dest,
         "<!-- Auto-generated by `lore export`. Do not edit manually. -->\n\n"
         "# Copilot Instructions\n\n"
         + _HEADER.format(date=_datestamp())
-        + (f"\n{security}" if security else "")
-        + f"\n{body}"
+        + "\n"
+        + _render_lean_body(config, root, tool="copilot")
     )
     return dest
 
 
 def export_cursor(root: Path, out: Path | None = None) -> Path:
+    """Write lean .cursor/rules/memory.md — references CHRONICLE.md at project root."""
     config = load_config(root)
-    body = _render_memories_markdown(root)
-    security = _render_security_preamble(config)
     dest = out or (root / ".cursor" / "rules" / "memory.md")
     _atomic_write(
         dest,
-        "# Project Memory\n\n"
+        "# Project Instructions\n\n"
         + _HEADER.format(date=_datestamp())
-        + (f"\n{security}" if security else "")
-        + f"\n{body}"
+        + "\n"
+        + _render_lean_body(config, root, tool="cursor")
     )
     return dest
 
 
 def export_claude(root: Path, out: Path | None = None) -> Path:
+    """Write lean CLAUDE.md — references CHRONICLE.md for full memory."""
     config = load_config(root)
-    body = _render_memories_markdown(root)
-    security = _render_security_preamble(config)
     dest = out or (root / "CLAUDE.md")
     _atomic_write(
         dest,
-        "# Claude Memory\n\n"
+        "# Claude Instructions\n\n"
         + _HEADER.format(date=_datestamp())
-        + (f"\n{security}" if security else "")
-        + f"\n{body}"
+        + "\n"
+        + _render_lean_body(config, root, tool="claude")
+    )
+    return dest
+
+
+def export_windsurf(root: Path, out: Path | None = None) -> Path:
+    """Write lean .windsurfrules for Windsurf (Codeium) — opt-in target."""
+    config = load_config(root)
+    dest = out or (root / ".windsurfrules")
+    _atomic_write(
+        dest,
+        "# Windsurf Rules\n\n"
+        + _HEADER.format(date=_datestamp())
+        + "\n"
+        + _render_lean_body(config, root, tool="windsurf")
+    )
+    return dest
+
+
+def export_gemini(root: Path, out: Path | None = None) -> Path:
+    """Write lean GEMINI.md for Gemini CLI — opt-in target."""
+    config = load_config(root)
+    dest = out or (root / "GEMINI.md")
+    _atomic_write(
+        dest,
+        "# Gemini Instructions\n\n"
+        + _HEADER.format(date=_datestamp())
+        + "\n"
+        + _render_lean_body(config, root, tool="gemini")
+    )
+    return dest
+
+
+def export_cline(root: Path, out: Path | None = None) -> Path:
+    """Write lean .clinerules for Cline (VS Code AI agent) — opt-in target."""
+    config = load_config(root)
+    dest = out or (root / ".clinerules")
+    _atomic_write(
+        dest,
+        "# Cline Rules\n\n"
+        + _HEADER.format(date=_datestamp())
+        + "\n"
+        + _render_lean_body(config, root, tool="cline")
+    )
+    return dest
+
+
+def export_aider(root: Path, out: Path | None = None) -> Path:
+    """Write lean CONVENTIONS.md for Aider — opt-in target."""
+    config = load_config(root)
+    dest = out or (root / "CONVENTIONS.md")
+    _atomic_write(
+        dest,
+        "# Conventions\n\n"
+        + _HEADER.format(date=_datestamp())
+        + "\n"
+        + _render_lean_body(config, root, tool="aider")
+    )
+    return dest
+
+
+def export_prompt(root: Path, out: Path | None = None) -> Path:
+    """Write .github/prompts/lore.prompt.md — invokable as /lore in Copilot Chat."""
+    config = load_config(root)
+    desc = config.get("project_description", "").strip()
+    desc_line = f"This project: {desc}\n\n" if desc else ""
+    dest = out or (root / ".github" / "prompts" / "lore.prompt.md")
+    _atomic_write(
+        dest,
+        "---\n"
+        "mode: 'ask'\n"
+        "description: 'Load full project memory from CHRONICLE.md'\n"
+        "---\n\n"
+        f"{desc_line}"
+        "Read **CHRONICLE.md** in the project root and summarize the context "
+        "most relevant to the current task. Focus on decisions, preferences, "
+        "and facts that affect how code should be written in this project.\n"
     )
     return dest
 
 
 EXPORT_TARGETS: dict[str, Any] = {
-    "agents": export_agents_md,
-    "copilot": export_copilot,
-    "cursor": export_cursor,
-    "claude": export_claude,
+    "chronicle": export_chronicle,  # full memory — written first; lean files reference it
+    "agents":    export_agents_md,
+    "copilot":   export_copilot,
+    "cursor":    export_cursor,
+    "claude":    export_claude,
+    "windsurf":  export_windsurf,   # opt-in; set windsurf: true in .lore/config.yaml
+    "gemini":    export_gemini,     # opt-in; set gemini: true in .lore/config.yaml
+    "cline":     export_cline,      # opt-in; set cline: true in .lore/config.yaml
+    "aider":     export_aider,      # opt-in; set aider: true in .lore/config.yaml
+    "prompt":    export_prompt,     # /lore prompt file for Copilot Chat
 }
 
 

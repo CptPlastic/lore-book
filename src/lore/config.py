@@ -11,12 +11,19 @@ CONFIG_FILE = "config.yaml"
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "version": 1,
-    "categories": ["decisions", "facts", "preferences", "summaries"],
+    "project_description": "",
+    "categories": ["decisions", "facts", "instructions", "preferences", "summaries"],
     "export_targets": {
-        "agents": True,
-        "copilot": True,
-        "cursor": True,
-        "claude": True,
+        "chronicle": True,   # full memory file — lean instruction files reference this
+        "agents":    True,
+        "copilot":   True,
+        "cursor":    True,
+        "claude":    True,
+        "windsurf":  False,  # opt-in: .windsurfrules for Windsurf/Codeium
+        "gemini":    False,  # opt-in: GEMINI.md for Gemini CLI
+        "cline":     False,  # opt-in: .clinerules for Cline (VS Code agent)
+        "aider":     False,  # opt-in: CONVENTIONS.md for Aider
+        "prompt":    True,   # .github/prompts/lore.prompt.md — invokable as /lore
     },
     "embedding_model": "all-MiniLM-L6-v2",
     # Default to the public Hugging Face Hub.

@@ -12,6 +12,8 @@ from rich.text import Text
 from rich.panel import Panel
 from rich import box
 
+from . import __version__
+
 # ---------------------------------------------------------------------------
 # Palette (mirrors tui.py so help screen feels consistent)
 # ---------------------------------------------------------------------------
@@ -22,7 +24,7 @@ _AD = "#996600"   # dim amber
 _BG = "#080c08"
 _BD = "#1a6606"   # border
 
-_BANNER_TEXT = f"[bold {_A}]L · O · R · E   -   AI  PROJECT  MEMORY[/bold {_A}]"
+_BANNER_TEXT = f"[bold {_A}]L · O · R · E   -   AI  PROJECT  MEMORY   v{__version__}[/bold {_A}]"
 
 # Force truecolor so VS Code's integrated terminal and other 256-color
 # terminals don't degrade hex palette colors to ugly approximations.
@@ -45,55 +47,129 @@ app.add_typer(hook_app,  name="hook")
 app.add_typer(index_app, name="index")
 app.add_typer(relic_app, name="relic")
 
+
+# ---------------------------------------------------------------------------
+# lore version
+# ---------------------------------------------------------------------------
+
+@app.command()
+def version(
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="Check PyPI for the latest available version"),
+    ] = False,
+) -> None:
+    """Show the current lore version and optionally check for updates."""
+    console.print(f"lore [bold]{__version__}[/bold]")
+    if check:
+        try:
+            import urllib.request
+            import json as _json
+            url = "https://pypi.org/pypi/lore-book/json"
+            with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
+                data = _json.loads(resp.read())
+            latest = data["info"]["version"]
+            if latest == __version__:
+                console.print(f"[dim]You are up to date.[/dim]")
+            else:
+                console.print(
+                    f"[bold {_A}]A new version is available:[/bold {_A}] [bold]{latest}[/bold]  "
+                    f"[dim](you have {__version__})[/dim]\n"
+                    f"  [dim]Run: [bold]pip3 install --upgrade lore-book[/bold][/dim]"
+                )
+        except Exception:
+            console.print(f"[dim]Could not reach PyPI to check for updates.[/dim]")
+
 console     = Console(color_system=_color_system, force_terminal=_force_color)
 err_console = Console(stderr=True, color_system=_color_system, force_terminal=_force_color)
 
 
+_CORE_ROWS = [
+    ("onboard",  "",                        "📜  new here? begin the chronicle setup"),
+    ("add",      "\\[category] \\[content]",  "inscribe a new memory into the spellbook"),
+    ("search",   "<query>",                 "seek knowledge across all memories"),
+    ("export",   "\\[--format]",              "publish the chronicle to AI context files"),
+    ("relic",    "capture|list|distill …",  "🏺  capture artifacts, distill into spells"),
+    ("ui",       "",                        "open the interactive terminal grimoire"),
+]
+
+_MORE_ROWS = [
+    ("list",          "\\[category]",             "list memories, optionally by tome"),
+    ("remove",        "<id>",                   "delete a memory by its ID"),
+    ("extract",       "\\[--last N]",             "pull memories from recent git commits"),
+    ("init",          "\\[path]",                 "create a .lore store in a directory"),
+    ("doctor",        "",                        "check store, model, and search status"),
+    ("awaken",        "\\[--background]",         "👁  watch .lore and auto-export on change"),
+    ("slumber",       "",                        "banish the background daemon"),
+    ("config",        "<key> <value>",           "set a config value"),
+    ("security",      "",                        "configure security guidelines for exports"),
+    ("hook",          "install|uninstall",       "manage the post-commit git hook"),
+    ("index",         "rebuild",                 "rebuild the semantic search index"),
+    ("version",       "\\[--check]",              "show version; --check queries PyPI"),
+]
+
+
+def _build_table(rows: list[tuple[str, str, str]]) -> Table:
+    t = Table(box=box.SIMPLE, show_header=True, header_style=f"bold {_A}",
+              show_edge=False, padding=(0, 1), expand=False)
+    t.add_column("SPELL",       style=f"bold {_P}", no_wrap=True, min_width=12)
+    t.add_column("ARGS",        style=_PD,          no_wrap=True, min_width=20)
+    t.add_column("EFFECT",      style=f"{_P}")
+    for cmd, args, desc in rows:
+        t.add_row(cmd, args, desc)
+    return t
+
+
 @app.callback(invoke_without_command=True)
-def _root(ctx: typer.Context) -> None:
+def _root(
+    ctx: typer.Context,
+    show_all: Annotated[
+        bool,
+        typer.Option("--all", help="Reveal the full grimoire of spells."),
+    ] = False,
+) -> None:
     """Show help when lore is run with no subcommand."""
     if ctx.invoked_subcommand is not None:
         return
+
     console.print()
     console.print(f"  {_BANNER_TEXT}")
     console.print()
 
-    t = Table(box=box.SIMPLE, show_header=True, header_style=f"bold {_A}",
-              show_edge=False, padding=(0, 1), expand=False)
-    t.add_column("COMMAND",     style=f"bold {_P}", no_wrap=True, min_width=14)
-    t.add_column("ARGS",        style=_PD,          no_wrap=True, min_width=22)
-    t.add_column("DESCRIPTION", style=f"{_P}")
+    if show_all:
+        console.print(f"  [{_AD}]── full grimoire ──────────────────────────────────[/{_AD}]")
+        console.print()
+        console.print(_build_table(_CORE_ROWS + _MORE_ROWS))
+        console.print(f"  [{_AD}]Run [bold]lore <spell> --help[/bold] for detailed options.[/{_AD}]")
+    else:
+        console.print(_build_table(_CORE_ROWS))
+        console.print(
+            f"  [{_AD}]Run [bold]lore --all[/bold] to reveal the full grimoire · "
+            f"[bold]lore <spell> --help[/bold] for details.[/{_AD}]"
+        )
 
-    rows = [
-        ("onboard",       "",                        "📜  New here? Start the guided chronicle setup"),
-        ("init",          "\\[path]",                  "Create a .lore store in a directory"),
-        ("add",           "\\[category] \\[content]",  "Store a new memory entry (interactive if no args)"),
-        ("list",          "\\[category]",              "List memories, optionally filtered by category"),
-        ("search",        "<query>",                 "Semantic search across all memories"),
-        ("remove",        "<id>",                    "Delete a memory by its ID"),
-        ("extract",       "\\[--last N]",              "Pull memories from recent git commits"),
-        ("export",        "\\[--format]",              "Write AI context files (AGENTS.md, copilot, cursor, claude)"),
-        ("config",        "<key> <value>",           "Set a config value (model_endpoint, ssl_verify, …)"),
-        ("security",      "",                        "Configure security guidelines for AI context exports"),
-        ("doctor",        "",                        "Check store, model, and search mode status"),
-        ("hook install",    "",                        "Install a post-commit git hook to auto-extract memories"),
-        ("hook uninstall",  "",                        "Remove the lore-managed post-commit hook"),
-        ("index rebuild",   "",                        "Rebuild the semantic search index from scratch"),
-        ("ui",            "",                        "Open the interactive terminal UI"),
-        ("awaken",        "[--background]",          "👁  Watch .lore and auto-export on every change"),
-        ("slumber",       "",                        "Banish the background spellbook daemon"),
-        ("relic capture", "[--file F] [--git-diff] [--git-log N] [--clipboard] [--stdin]",  "🏺  Capture a session, doc, or diff as a relic"),
-        ("relic list",    "",                        "List all relics in the spellbook"),
-        ("relic distill", "<id>",                    "Extract spells (memories) from a relic"),
-        ("relic view",    "<id>",                    "View the full content of a relic"),
-        ("relic remove",  "<id>",                    "Permanently destroy a relic"),
-    ]
-    for cmd, args, desc in rows:
-        t.add_row(cmd, args, desc)
-
-    console.print(t)
-    console.print(f"  [{_AD}]Run [bold]lore <command> --help[/bold] for detailed options.[/{_AD}]")
     console.print()
+
+    # Background update check — non-blocking, silent on error or up-to-date.
+    def _check_update() -> None:
+        try:
+            import urllib.request
+            import json as _json
+            with urllib.request.urlopen(  # noqa: S310
+                "https://pypi.org/pypi/lore-book/json", timeout=3
+            ) as resp:
+                latest = _json.loads(resp.read())["info"]["version"]
+            if latest != __version__:
+                console.print(
+                    f"  [{_A}]✦  Update available:[/{_A}] [bold]{latest}[/bold]"
+                    f"  [dim](you have {__version__})[/dim]\n"
+                    f"  [dim]  pip3 install --upgrade lore-book[/dim]\n"
+                )
+        except Exception:
+            pass
+
+    import threading as _threading
+    _threading.Thread(target=_check_update, daemon=True).start()
 
 
 def _require_root() -> Path:
@@ -120,8 +196,18 @@ def init(
 ) -> None:
     """Initialize a .lore store in the given directory."""
     from .store import init_store
+    from .extract import _is_git_repo
     root = path.resolve()
     init_store(root)
+    # Warn if not inside a git repo — extract/hook won't work
+    if not _is_git_repo(root):
+        console.print(
+            f"  [bold {_A}]▲[/bold {_A}]  [bold]{root}[/bold] is not a git repository.\n"
+            f"  [dim]lore add/search/export work fine here, but [bold]lore extract[/bold] and "
+            f"[bold]lore hook[/bold] require git.\n"
+            f"  Run [bold]git init[/bold] first if you need those features.[/dim]"
+        )
+        console.print()
     # Add .lore to .gitignore if inside a git repo
     gitignore = root / ".gitignore"
     entry = ".lore/"
@@ -147,6 +233,34 @@ def init(
             style=f"on {_BG}",
         )
     )
+
+
+def _detect_project_description(root: Path) -> str:
+    """Auto-detect a one-line project description from pyproject.toml or README."""
+    import re
+
+    pyproject = root / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            text = pyproject.read_text()
+            m = re.search(r'^description\s*=\s*["\'](.+?)["\']', text, re.MULTILINE)
+            if m:
+                return m.group(1).strip()
+        except Exception:
+            pass
+
+    for readme in ("README.md", "README.rst", "README.txt", "README"):
+        p = root / readme
+        if p.exists():
+            try:
+                for line in p.read_text().splitlines():
+                    line = line.strip()
+                    if line and not line.startswith(("#", "!", "<", "[", ">")) and len(line) >= 15:
+                        return line[:140]
+            except Exception:
+                pass
+
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +371,24 @@ def onboard() -> None:
         _beat(f"  [dim]The gates have been hidden from git's eye.[/dim]")
 
     cfg = load_config(root)
+
+    # ── Project description ───────────────────────────────────────────────────
+    existing_desc = cfg.get("project_description", "").strip()
+    if not existing_desc:
+        console.print()
+        _beat(f"  [dim]A brief description helps AI tools understand this project at a glance.[/dim]")
+        console.print()
+        detected = _detect_project_description(root)
+        proj_desc = Prompt.ask(
+            f"  [bold {_P}]Project description[/bold {_P}] [dim](one line, optional)[/dim]",
+            default=detected,
+        )
+        if proj_desc.strip():
+            cfg["project_description"] = proj_desc.strip()
+            save_config(root, cfg)
+            _beat(f"  [bold {_P}]✓[/bold {_P}]  Inscribed: [dim]{proj_desc[:72]}[/dim]")
+    else:
+        _beat(f"  [bold {_P}]✓[/bold {_P}]  Project: [dim]{existing_desc[:72]}[/dim]")
 
     # ── Chapter II — Inscribe a Law ──────────────────────────────────────────
     _chapter(2, "Inscribe a Law")
@@ -523,14 +655,16 @@ def list_cmd(
         return
 
     table = Table(show_header=True, header_style="bold magenta", expand=True)
+    table.add_column("#", style="dim", width=4, no_wrap=True)
     table.add_column("ID", style="dim", width=10, no_wrap=True)
-    table.add_column("Category", width=12, no_wrap=True)
+    table.add_column("Category", width=14, no_wrap=True)
     table.add_column("Content", min_width=20, overflow="fold")
     table.add_column("Tags", width=20, no_wrap=True)
     table.add_column("Created", width=19, no_wrap=True)
 
-    for m in memories:
+    for i, m in enumerate(memories, 1):
         table.add_row(
+            str(i),
             m.get("id", ""),
             m.get("category", ""),
             m.get("content", ""),
@@ -538,6 +672,7 @@ def list_cmd(
             m.get("created_at", "")[:19],
         )
     console.print(table)
+    console.print(f"  [dim]Use [bold]lore edit <#>[/bold] or [bold]lore edit <id>[/bold] to modify a spell.[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -602,8 +737,213 @@ def remove(
 
 
 # ---------------------------------------------------------------------------
-# mem extract
+# lore describe
 # ---------------------------------------------------------------------------
+
+@app.command()
+def describe(
+    text: Annotated[
+        Optional[str],
+        typer.Argument(help="One-line project description"),
+    ] = None,
+) -> None:
+    """Set the project description shown at the top of all lean instruction files."""
+    from .config import load_config, save_config
+    from rich.prompt import Prompt
+
+    root = _require_root()
+    cfg = load_config(root)
+
+    if text is None:
+        current = cfg.get("project_description", "").strip()
+        console.print()
+        if current:
+            console.print(f"  [dim]Current:[/dim] {current}")
+            console.print()
+        text = Prompt.ask(
+            f"  [bold {_P}]Project description[/bold {_P}] [dim](one line)[/dim]",
+            default=current or "",
+        )
+
+    text = text.strip()
+    if not text:
+        console.print("  [dim]No change.[/dim]")
+        return
+
+    cfg["project_description"] = text
+    save_config(root, cfg)
+    console.print(f"  [bold {_P}]✓[/bold {_P}]  Description set. Run [bold]lore export[/bold] to publish.")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# lore instructions
+# ---------------------------------------------------------------------------
+
+_VALID_TOOLS = ["all", "agents", "copilot", "cursor", "claude", "windsurf", "gemini", "cline", "aider"]
+
+@app.command("instructions")
+def instructions_cmd(
+    content: Annotated[
+        Optional[str],
+        typer.Argument(help="Directive for the AI tool(s)"),
+    ] = None,
+    tool: Annotated[
+        str,
+        typer.Option("--tool", "-t", help=f"Target tool tag: {', '.join(_VALID_TOOLS)}"),
+    ] = "all",
+) -> None:
+    """Add a tool-specific instruction spell (shortcut for `lore add instructions`)."""
+    from .store import add_memory
+    from .search import index_memory
+    from rich.prompt import Prompt
+
+    root = _require_root()
+
+    if tool not in _VALID_TOOLS:
+        err_console.print(f"[red]Unknown tool '{tool}'. Choose: {', '.join(_VALID_TOOLS)}[/red]")
+        raise typer.Exit(code=1)
+
+    if content is None:
+        console.print()
+        console.print(f"  [dim]This will add a directive to the [bold]instructions[/bold] tome, scoped to \"{tool}\".[/dim]")
+        console.print(f"  [dim]Tools tagged \"all\" appear in every lean instruction file.[/dim]")
+        console.print()
+        content = Prompt.ask(f"  [bold {_P}]Instruction[/bold {_P}]")
+        while not content.strip():
+            console.print(f"  [bold red]Content cannot be empty.[/bold red]")
+            content = Prompt.ask(f"  [bold {_P}]Instruction[/bold {_P}]")
+        console.print()
+
+    with console.status("Indexing…"):
+        entry = add_memory(root, "instructions", content.strip(), tags=[tool])
+        index_memory(root, entry["id"], content)
+
+    console.print(
+        f"  [bold {_P}]✓[/bold {_P}]  Saved [bold]{entry['id']}[/bold] "
+        f"→ [bold]instructions[/bold] [dim](scope: {tool})[/dim]"
+    )
+    console.print(f"  [dim]Run [bold]lore export[/bold] to publish to your AI tool files.[/dim]")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# lore edit
+# ---------------------------------------------------------------------------
+
+@app.command()
+def edit(
+    ref: Annotated[
+        Optional[str],
+        typer.Argument(help="Row number from `lore list` or memory ID prefix"),
+    ] = None,
+) -> None:
+    """Edit a memory — pick by row number or ID (interactive picker if no arg)."""
+    from .store import list_memories, update_memory
+    from .search import index_memory
+    from .config import load_config
+    from rich.prompt import Prompt, Confirm
+
+    root = _require_root()
+    memories = list_memories(root)
+    if not memories:
+        console.print("[yellow]No memories found.[/yellow]")
+        return
+
+    mem: dict | None = None
+
+    if ref is None:
+        # Interactive numbered picker
+        console.print()
+        table = Table(show_header=True, header_style=f"bold {_A}", expand=True)
+        table.add_column("#", style="dim", width=4, no_wrap=True)
+        table.add_column("ID", style="dim", width=10, no_wrap=True)
+        table.add_column("Category", width=14, no_wrap=True)
+        table.add_column("Content", min_width=20, overflow="fold")
+        table.add_column("Tags", width=20, no_wrap=True)
+        for i, m in enumerate(memories, 1):
+            table.add_row(
+                str(i),
+                m.get("id", ""),
+                m.get("category", ""),
+                m.get("content", ""),
+                ", ".join(m.get("tags", [])),
+            )
+        console.print(table)
+        console.print()
+        choice = Prompt.ask(f"  [bold {_P}]Which spell to edit?[/bold {_P}] [dim](#  or  id)[/dim]")
+        ref = choice.strip()
+
+    # Resolve by row number first, then ID prefix
+    if ref.isdigit():
+        idx = int(ref) - 1
+        if 0 <= idx < len(memories):
+            mem = memories[idx]
+        else:
+            err_console.print(f"[red]No spell at row {ref}.[/red]")
+            raise typer.Exit(code=1)
+    else:
+        matches = [m for m in memories if m.get("id", "").startswith(ref)]
+        if len(matches) == 1:
+            mem = matches[0]
+        elif len(matches) > 1:
+            err_console.print(f"[red]Ambiguous ID prefix '{ref}' — matches {len(matches)} spells. Use more characters.[/red]")
+            raise typer.Exit(code=1)
+        else:
+            err_console.print(f"[red]No spell found matching '{ref}'.[/red]")
+            raise typer.Exit(code=1)
+
+    # Pre-populated edit form
+    console.print()
+    console.print(Panel(
+        f"[bold {_A}]Editing spell [dim]{mem['id']}[/dim][/bold {_A}]",
+        border_style=_A, padding=(0, 2), style=f"on {_BG}",
+    ))
+    console.print()
+
+    cfg = load_config(root)
+    valid_cats = cfg.get("categories", [])
+    console.print(f"  [dim]Available categories:[/dim] {', '.join(valid_cats)}")
+    console.print()
+
+    new_category = Prompt.ask(
+        f"  [bold {_P}]Category[/bold {_P}]",
+        default=mem.get("category", "facts"),
+    )
+    console.print()
+    new_content = Prompt.ask(
+        f"  [bold {_P}]Content[/bold {_P}]",
+        default=mem.get("content", ""),
+    )
+    while not new_content.strip():
+        console.print(f"  [bold red]Content cannot be empty.[/bold red]")
+        new_content = Prompt.ask(f"  [bold {_P}]Content[/bold {_P}]")
+    console.print()
+    current_tags = ", ".join(mem.get("tags", []))
+    new_tags_input = Prompt.ask(
+        f"  [bold {_P}]Tags[/bold {_P}]",
+        default=current_tags,
+    )
+    new_tags = [t.strip() for t in new_tags_input.split(",") if t.strip()]
+    console.print()
+
+    confirmed = Confirm.ask(f"  [bold {_P}]Save changes?[/bold {_P}]", default=True)
+    if not confirmed:
+        console.print(f"  [dim]Cancelled — nothing was changed.[/dim]\n")
+        raise typer.Exit()
+
+    updates = {"category": new_category, "content": new_content, "tags": new_tags}
+    with console.status("Saving…"):
+        updated = update_memory(root, mem["id"], updates)
+        if updated:
+            index_memory(root, updated["id"], new_content)
+
+    if updated:
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  Saved [bold]{updated['id']}[/bold] → [bold]{new_category}[/bold]")
+    else:
+        err_console.print(f"[red]Update failed — spell not found.[/red]")
+        raise typer.Exit(code=1)
+    console.print()
 
 @app.command()
 def extract(
@@ -699,6 +1039,16 @@ def export(
     for p in paths:
         rel = p.relative_to(root)
         console.print(f"[green]Wrote[/green] {rel}")
+
+    from .config import load_config
+    cfg = load_config(root)
+    if not cfg.get("project_description", "").strip():
+        console.print(
+            f"\n[{_A}]Tip:[/{_A}] No project description set — "
+            "lean instruction files will lack a project summary.\n"
+            f"  Run [bold]lore onboard[/bold] or add "
+            f"[bold]project_description[/bold] to [dim].lore/config.yaml[/dim]."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1071,6 +1421,34 @@ def doctor() -> None:
         console.print()
         raise SystemExit(1)
 
+    # --- Git ---
+    from .extract import _is_git_repo, git_context
+    console.print()
+    if _is_git_repo(root):
+        ctx = git_context(root)
+        branch = ctx.get("branch", "unknown")
+        author = ctx.get("author")
+        remote = ctx.get("remote_name")
+        last_sha = ctx.get("last_sha")
+        last_msg = ctx.get("last_msg", "")
+        repo_label = remote or root.name
+        console.print(f"  {ok}  Git repo        : [bold]{repo_label}[/bold]")
+        console.print(f"  {ok}  Branch          : [bold]{branch}[/bold]")
+        if author:
+            console.print(f"  {ok}  Author          : [bold]{author}[/bold]")
+        if last_sha:
+            short_msg = last_msg[:60] + ("…" if len(last_msg) > 60 else "")
+            console.print(f"  {ok}  Last commit     : [dim]{last_sha}[/dim] {short_msg}")
+        hook_path = root / ".git" / "hooks" / "post-commit"
+        if hook_path.exists() and "# Installed by lore" in hook_path.read_text():
+            console.print(f"  {ok}  Post-commit hook: [bold]installed[/bold]")
+        else:
+            console.print(f"  {warn}  Post-commit hook: [dim]not installed[/dim]  "
+                          f"[{_AD}]→ run [bold {_P}]lore hook install[/bold {_P}][/{_AD}]")
+    else:
+        console.print(f"  {warn}  Git repo        : [bold {_A}]not a git repository[/bold {_A}]")
+        console.print(f"       [{_AD}][bold]lore extract[/bold] and [bold]lore hook[/bold] require git.[/{_AD}]")
+
     # --- Config values ---
     endpoint   = cfg.get("model_endpoint") or "https://huggingface.co"
     ssl_verify = cfg.get("model_ssl_verify", True)
@@ -1083,6 +1461,27 @@ def doctor() -> None:
         console.print(f"  {warn}  SSL verify      : [bold red]disabled[/bold red]")
     else:
         console.print(f"  {ok}  SSL verify      : enabled")
+
+    # --- Spell counts + instructions nudge ---
+    console.print()
+    from .store import list_memories
+    all_mems = list_memories(root)
+    by_cat: dict[str, int] = {}
+    for m in all_mems:
+        cat = m.get("category", "?")
+        by_cat[cat] = by_cat.get(cat, 0) + 1
+    total = sum(by_cat.values())
+    if total:
+        counts = "  ".join(f"[dim]{c}[/dim] {n}" for c, n in sorted(by_cat.items()))
+        console.print(f"  {ok}  Spells ({total})    : {counts}")
+    else:
+        console.print(f"  {warn}  No spells stored yet. Run [bold]lore add[/bold] to capture your first memory.")
+    if not by_cat.get("instructions"):
+        console.print(
+            f"  {warn}  No [bold]instructions[/bold] spells — "
+            f"[{_AD}]these become per-tool directives in your AI files.[/{_AD}]\n"
+            f"       [{_AD}]→ run [bold {_P}]lore instructions[/bold {_P}] to add one[/{_AD}]"
+        )
 
     # --- Model availability ---
     console.print()
