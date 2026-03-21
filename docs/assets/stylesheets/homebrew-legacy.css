@@ -47,6 +47,27 @@
   min-height: 100vh;
 }
 
+body.legacy-home-page .md-header,
+body.legacy-home-page .md-sidebar,
+body.legacy-home-page .md-tabs,
+body.legacy-home-page .md-footer {
+  display: none;
+}
+
+body.legacy-home-page .md-main__inner {
+  display: block;
+  margin: 0;
+}
+
+body.legacy-home-page .md-content {
+  max-width: none;
+}
+
+body.legacy-home-page .md-content__inner {
+  margin: 0;
+  padding: 0;
+}
+
 #sparkles {
   position: fixed;
   inset: 0;

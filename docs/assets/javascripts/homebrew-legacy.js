@@ -1,5 +1,11 @@
 (() => {
   const canvas = document.getElementById("sparkles");
+  const legacyHome = document.querySelector(".legacy-home");
+
+  if (legacyHome) {
+    document.body.classList.add("legacy-home-page");
+  }
+
   if (!canvas) {
     return;
   }
