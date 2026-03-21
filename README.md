@@ -139,24 +139,24 @@ If dense model loading fails, lore automatically falls back to TF-IDF so search 
 
 ## Documentation site (GitHub Pages)
 
-This repository now includes a docs site scaffold in `docs/` using MkDocs.
+This repository now includes a plain static docs site in `docs/` for GitHub Pages.
 
-Run docs locally:
+Preview locally:
 
 ```sh
-pip install "lore-book[docs]"
-mkdocs serve
+cd docs
+python3 -m http.server 8000
 ```
 
-Build docs locally:
+Then open:
 
-```sh
-mkdocs build --strict
+```text
+http://localhost:8000
 ```
 
 Publishing is handled by `.github/workflows/docs.yml` on pushes to `main`/`master`.
 
-To migrate existing docs pages into this repo, copy markdown files into `docs/` and update `nav` in `mkdocs.yml`.
+To migrate existing docs pages into this repo, add or edit static files under `docs/`.
 
 ---
 

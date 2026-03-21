@@ -11,82 +11,89 @@
 
 @import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap");
 
-.md-main {
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
   background-color: #1a1208;
   background-image:
     radial-gradient(ellipse at 50% 0%, rgba(200, 151, 58, 0.08) 0%, transparent 70%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-}
-
-.md-content {
   color: var(--ink);
   font-family: "Crimson Text", Georgia, serif;
   font-size: 19px;
   line-height: 1.75;
+  min-height: 100vh;
 }
 
-.md-content__inner {
-  margin: 0;
-  padding-top: 0;
+a {
+  color: inherit;
 }
 
-.md-content__inner:before {
-  display: none;
-}
-
-.md-content h1,
-.md-content h2,
-.md-content h3,
-.md-header__title,
-.md-tabs__link {
+h1,
+h2,
+h3 {
   font-family: "Cinzel", serif;
 }
 
-.legacy-home {
-  position: relative;
-  min-height: 100vh;
+.site-nav-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  backdrop-filter: blur(10px);
+  background: rgba(26, 18, 8, 0.74);
+  border-bottom: 1px solid rgba(200, 151, 58, 0.18);
 }
 
-body.legacy-home-page .md-header,
-body.legacy-home-page .md-sidebar,
-body.legacy-home-page .md-tabs,
-body.legacy-home-page .md-footer {
-  display: none;
-}
-
-body.legacy-home-page .md-main__inner {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  margin: 0;
-  padding: 0;
-  max-width: none;
-  min-height: 100vh;
-}
-
-body.legacy-home-page .md-content {
-  flex: 1 1 auto;
-  width: 100%;
-  max-width: none;
+.site-nav {
+  width: min(100%, 1100px);
   margin: 0 auto;
+  padding: 0.85rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
-body.legacy-home-page .md-content__inner {
-  width: 100%;
-  margin: 0;
-  padding: 0;
+.site-brand,
+.site-link {
+  text-decoration: none;
 }
 
-body.legacy-home-page .md-grid {
-  max-width: none;
-  margin: 0;
+.site-brand {
+  font-family: "Cinzel", serif;
+  font-size: 1.05rem;
+  letter-spacing: 0.12em;
+  color: var(--gold-bright);
 }
 
-body.legacy-home-page .md-container,
-body.legacy-home-page .md-main,
-body.legacy-home-page .md-content,
-body.legacy-home-page article.md-content__inner {
-  overflow: visible;
+.site-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem 0.8rem;
+}
+
+.site-link {
+  font-family: "Cinzel", serif;
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  color: var(--parchment-dark);
+  padding: 0.28rem 0.4rem;
+  border-bottom: 1px solid transparent;
+}
+
+.site-link:hover,
+.site-link.active,
+.site-brand.active {
+  color: var(--gold-bright);
+  border-color: rgba(232, 184, 75, 0.6);
 }
 
 #sparkles {
@@ -108,6 +115,10 @@ body.legacy-home-page article.md-content__inner {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.docs-page {
+  padding-top: 2.4rem;
 }
 
 .cover {
@@ -171,6 +182,26 @@ body.legacy-home-page article.md-content__inner {
   max-width: 32rem;
   margin-left: auto;
   margin-right: auto;
+}
+
+.simple-hero {
+  text-align: center;
+}
+
+.simple-hero h1 {
+  margin: 0;
+  font-size: clamp(2.3rem, 6vw, 3.7rem);
+  color: var(--gold-bright);
+  text-shadow: 0 0 30px rgba(232, 184, 75, 0.22);
+}
+
+.eyebrow {
+  margin: 0 0 0.6rem;
+  font-family: "Cinzel", serif;
+  font-size: 0.8rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
 }
 
 .parchment {
@@ -298,6 +329,10 @@ body.legacy-home-page article.md-content__inner {
   text-decoration: none;
 }
 
+.target-item a:hover {
+  text-decoration: underline;
+}
+
 .link-rune {
   font-family: "Cinzel", serif;
   font-size: 0.85rem;
@@ -397,6 +432,15 @@ body.legacy-home-page article.md-content__inner {
 }
 
 @media (max-width: 600px) {
+  body {
+    font-size: 18px;
+  }
+
+  .site-nav {
+    padding: 0.8rem 0.9rem;
+    flex-direction: column;
+  }
+
   .page {
     padding: 2rem 0.85rem 4rem;
   }
@@ -407,10 +451,6 @@ body.legacy-home-page article.md-content__inner {
 
   .tagline {
     font-size: 1.05rem;
-  }
-
-  .md-content {
-    font-size: 18px;
   }
 
   .target-list,

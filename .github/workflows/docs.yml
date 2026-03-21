@@ -5,13 +5,11 @@ on:
     branches: ["main", "master"]
     paths:
       - "docs/**"
-      - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   pull_request:
     branches: ["main", "master"]
     paths:
       - "docs/**"
-      - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -31,22 +29,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install docs dependencies
-        run: |
-          pip install mkdocs mkdocs-material
-
-      - name: Build docs
-        run: mkdocs build --strict
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: docs
 
   deploy:
     if: github.event_name != 'pull_request'
