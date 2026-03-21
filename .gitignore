@@ -22,3 +22,13 @@ GEMINI.md
 CONVENTIONS.md
 .venv
 .venv-smoke
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Local environment files
+.env
+.env.*
+!.env.example
