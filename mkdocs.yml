@@ -1,0 +1,36 @@
+site_name: Lore
+site_description: The spellbook for your codebase
+site_url: https://cptplastic.github.io/lore-book/
+repo_url: https://github.com/cptplastic/lore-book
+repo_name: cptplastic/lore-book
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: amber
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+extra_css:
+  - assets/stylesheets/enchanted.css
+
+extra_javascript:
+  - assets/javascripts/sparkles.js
+
+nav:
+  - Home: index.md
+  - Install: install.md
+  - Concepts: concepts.md
+  - CLI: cli.md
+  - FAQ: faq.md

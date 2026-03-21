@@ -39,9 +39,14 @@ dependencies = [
 semantic = [
     "sentence-transformers>=3.0",
 ]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+]
 # Everything
 all = [
     "lore-book[semantic]",
+    "lore-book[docs]",
 ]
 
 [project.scripts]

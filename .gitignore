@@ -13,7 +13,7 @@ README_tmp.html
 AGENTS.md
 
 CLAUDE.md
-.DS_Store
+*.DS_Store
 .lore/
 .github/prompts/lore.prompt.md
 .windsurfrules
