@@ -502,6 +502,7 @@ class LoreApp(App):
 
     _query: reactive[str] = reactive("")
     _all_memories: list[dict] = []
+    _load_gen: int = 0
 
     def __init__(self, root: Path) -> None:
         super().__init__()
@@ -580,6 +581,8 @@ class LoreApp(App):
     @work(thread=True)
     def _stream_rows(self, memories: list[dict]) -> None:
         """Animate rows trickling in one-by-one like a terminal readout."""
+        self._load_gen += 1
+        gen = self._load_gen
         q = self._query.lower()
         visible = [
             m for m in memories
@@ -592,6 +595,8 @@ class LoreApp(App):
         # clear first
         self.call_from_thread(lambda: self.query_one(self._TABLE, DataTable).clear())
         for i, m in enumerate(visible):
+            if self._load_gen != gen:
+                return
             cat     = m.get("category", "")
             content = m.get("content", "")
             tags    = ", ".join(m.get("tags", []))
@@ -604,7 +609,10 @@ class LoreApp(App):
             )
             mem_id = m.get("id")
             self.call_from_thread(
-                lambda r=row, k=mem_id: self.query_one(self._TABLE, DataTable).add_row(*r, key=k)
+                lambda r=row, k=mem_id, g=gen: (
+                    self.query_one(self._TABLE, DataTable).add_row(*r, key=k)
+                    if self._load_gen == g else None
+                )
             )
             # stagger — faster as it loads
             delay = max(0.03, 0.12 - i * 0.008)
