@@ -109,12 +109,9 @@ h3 {
   max-width: 860px;
   width: min(100%, 860px);
   margin: 0 auto;
-  padding: 3.5rem 1.5rem 6rem;
+  padding: 3rem 2rem 6rem;
   position: relative;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
 }
 
 .docs-page {
@@ -413,7 +410,7 @@ h3 {
   opacity: 0.7;
 }
 
-.legacy-home footer {
+footer {
   text-align: center;
   color: rgba(200, 151, 58, 0.4);
   font-family: "Cinzel", serif;
@@ -424,6 +421,83 @@ h3 {
   border-top: 1px solid rgba(200, 151, 58, 0.2);
   width: 100%;
 }
+
+/* ── spell list ── */
+
+.spells {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.spells li {
+  padding: 0.5rem 0 0.5rem 1.8rem;
+  border-bottom: 1px dashed rgba(200, 151, 58, 0.3);
+  position: relative;
+  color: var(--ink);
+}
+
+.spells li:last-child {
+  border-bottom: none;
+}
+
+.spells li::before {
+  content: "⚜";
+  position: absolute;
+  left: 0;
+  color: var(--gold);
+  font-size: 0.85em;
+  top: 0.65rem;
+}
+
+.spells li strong {
+  font-family: "Cinzel", serif;
+  font-size: 0.9rem;
+  color: var(--red);
+  letter-spacing: 0.06em;
+}
+
+/* ── feature grid ── */
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.feature-card {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(200, 151, 58, 0.28);
+  padding: 1rem 1.1rem;
+  position: relative;
+}
+
+.feature-card h3 {
+  margin-top: 0;
+}
+
+.feature-card p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── quote block ── */
+
+.quote-block {
+  margin: 1.2rem 0;
+  padding: 1.1rem 1.2rem;
+  border-top: 1px solid rgba(200, 151, 58, 0.4);
+  border-bottom: 1px solid rgba(200, 151, 58, 0.4);
+  color: var(--ink-faded);
+  font-style: italic;
+  text-align: center;
+}
+
+/* ── incantation syntax colours ── */
+
+.incantation .comment { color: #5c7a3a; }
+.incantation .cmd     { color: #e8b84b; }
+.incantation .arg     { color: #c8d89a; }
 
 @media (max-width: 900px) {
   .parchment {
@@ -454,7 +528,8 @@ h3 {
   }
 
   .target-list,
-  .command-columns {
+  .command-columns,
+  .feature-grid {
     grid-template-columns: 1fr;
   }
 }

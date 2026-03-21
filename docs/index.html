@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Lore — The spellbook for your codebase</title>
+  <title>Lore — The Spellbook for Your Codebase</title>
   <meta name="description" content="Local AI memory for software projects. Chronicle decisions and context your tools can actually read." />
   <link rel="canonical" href="https://cptplastic.github.io/lore-book/" />
   <link rel="stylesheet" href="assets/stylesheets/homebrew-legacy.css" />
@@ -11,47 +11,232 @@
 <body>
   <canvas id="sparkles"></canvas>
 
-  <header class="site-nav-wrap">
-    <nav class="site-nav" aria-label="Primary">
-      <span class="site-brand">Lore</span>
-      <a class="site-link" href="https://github.com/CptPlastic/lore-book">GitHub ↗</a>
-    </nav>
-  </header>
+  <div class="page">
 
-  <main class="page">
-    <div class="hero">
+    <!-- ══ COVER ══ -->
+    <header class="cover">
       <div class="sigil">📜</div>
       <h1>Lore</h1>
-      <p class="tagline">Local AI memory for your codebase.<br>Chronicle decisions, context, and lessons your tools can actually read.</p>
-      <div class="install-strip">
-        <div class="incantation one-liner">pip install lore-book</div>
-        <div class="install-then">then</div>
-        <div class="incantation one-liner">lore onboard</div>
-      </div>
-    </div>
+      <p class="subtitle">Keeper of the Chronicle</p>
+      <p class="tagline">"The spellbook for your codebase — chronicle decisions, context,<br>and lessons your AI companions can actually read."</p>
+    </header>
 
+    <!-- ══ WHAT IS THIS ══ -->
     <section class="parchment">
-      <p class="lead">AI tools are stateless. They don't remember why you chose Postgres, what rules can't be bypassed, or the tradeoffs that already shaped your codebase. <strong>Lore</strong> gives them persistent memory — stored as plain YAML next to your code, no cloud, no API keys.</p>
-
-      <h3>Record knowledge</h3>
-      <div class="incantation">lore add decisions "Use Postgres for row-level locking"
-lore add facts    "Auth service is the sole JWT issuer"</div>
-
-      <h3>Search and export</h3>
-      <div class="incantation">lore search "why postgres"
-lore export                  # → CHRONICLE.md</div>
-
-      <p class="note">CHRONICLE.md is automatically wired into Copilot, Claude, Cursor, and AGENTS instruction files on export.</p>
+      <h2><span class="rune">✦</span> What is Lore?</h2>
+      <p>AI coding tools are <em>stateless</em>. They don't remember why you chose PostgreSQL over SQLite, that the auth layer must never bypass JWT validation, or that the frontend team deprecated the v1 API six months ago. You end up re-explaining the same context in every session.</p>
+      <p><strong>Lore</strong> fixes that. It is a local AI memory system for software projects. You capture knowledge once as plain YAML alongside your code — then Lore publishes it as instruction files that GitHub Copilot, Claude, Cursor, Codex, and other AI tools read automatically.</p>
+      <p>By default, Lore exports <code>CHRONICLE.md</code> plus lean adapter files so the same project description, security preamble, and memory entry points stay consistent everywhere.</p>
+      <p>No external database. No API keys. No cloud sync. Everything lives in <code>.lore/</code> next to your code.</p>
+      <div class="badge-row">
+        <span class="ver-badge">LOCAL YAML STORE</span>
+        <span class="ver-badge">CHRONICLE FIRST</span>
+        <span class="ver-badge">NO CLOUD SYNC</span>
+        <span class="ver-badge">TOOL-AGNOSTIC</span>
+      </div>
     </section>
 
-    <footer class="site-footer">
-      <a href="https://github.com/CptPlastic/lore-book">Source</a>
-      <span>·</span>
-      <a href="https://pypi.org/project/lore-book/">PyPI</a>
-      <span>·</span>
-      <span>FSL-1.1-MIT</span>
-    </footer>
-  </main>
+    <!-- ══ THE THREE ARTEFACTS ══ -->
+    <section class="parchment">
+      <h2><span class="rune">⚜</span> The Three Artefacts</h2>
+      <h3>Spell <em style="font-weight:400;color:var(--ink-faded)">(a memory)</em></h3>
+      <p>A single piece of knowledge: a decision, a fact, a hard-won lesson. Short, specific, retrievable by semantic search.</p>
+      <h3>Tome <em style="font-weight:400;color:var(--ink-faded)">(a category)</em></h3>
+      <p>A named collection of spells. Default tomes: <strong>decisions</strong>, <strong>facts</strong>, <strong>preferences</strong>, <strong>summaries</strong>. Add your own in <code>.lore/config.yaml</code>.</p>
+      <h3>Relic <em style="font-weight:400;color:var(--ink-faded)">(a raw artifact)</em></h3>
+      <p>A raw artifact saved as-is for later distillation — a pasted session log, a git diff, a Slack thread. It lands in <code>.lore/relics/</code> untouched until you're ready to extract spells from it.</p>
+    </section>
+
+    <!-- ══ HOW THE MAGIC FLOWS ══ -->
+    <section class="parchment">
+      <h2><span class="rune">✧</span> How the Magic Flows</h2>
+      <div class="scroll-diagram">Your decisions, facts &amp; lessons
+        ↓  lore add / lore relic
+  .lore/  (plain YAML)
+        ↓  lore export
+  CHRONICLE.md  ←  full project memory (one source of truth)
+        ↓  referenced by lean instruction files:
+  copilot-instructions.md · AGENTS.md · CLAUDE.md
+  .cursor/rules/memory.md · GEMINI.md · .clinerules
+        ↓  on demand in Copilot Chat:
+  /lore  →  reads CHRONICLE.md into context
+        ↓
+  Every AI tool reads your repo context
+        — without you repeating yourself</div>
+    </section>
+
+    <!-- ══ FIRST INVOCATION ══ -->
+    <section class="parchment">
+      <h2><span class="rune">✶</span> First Invocation</h2>
+      <p>New users should start with onboarding. Lore walks through the store layout, security policy, your first spell, and publishing in one guided ritual.</p>
+      <div class="incantation"><span class="cmd">lore onboard</span></div>
+      <ol class="ritual-steps">
+        <li><strong>Initialize the spellbook</strong> with a project description and local store defaults.</li>
+        <li><strong>Record real knowledge</strong> as decisions, facts, preferences, or summaries.</li>
+        <li><strong>Export the chronicle</strong> so every supported AI tool inherits the same context.</li>
+        <li><strong>Enable dense semantic search</strong> later with <code>lore setup semantic</code> if you want embeddings beyond TF-IDF fallback.</li>
+      </ol>
+      <div class="note">Requirements: Python 3.10+. Dense vector search is optional. If model loading fails, Lore falls back to TF-IDF so search still works.</div>
+    </section>
+
+    <!-- ══ EXPORT ARCHITECTURE ══ -->
+    <section class="parchment">
+      <h2><span class="rune">⌘</span> Export Architecture</h2>
+      <p>Lore uses a two-layer export model: one canonical chronicle, then thin instruction files that point back to it. That keeps token overhead low while preserving full project memory when needed.</p>
+      <div class="target-list">
+        <div class="target-item">
+          <strong>CHRONICLE.md</strong>
+          Complete project memory grouped by tome. This is the single source of truth.
+        </div>
+        <div class="target-item">
+          <strong>.github/copilot-instructions.md</strong>
+          Lean GitHub Copilot adapter with project summary, security preamble, and chronicle reference.
+        </div>
+        <div class="target-item">
+          <strong>AGENTS.md and CLAUDE.md</strong>
+          Small tool-specific adapters for Codex, agent frameworks, and Claude.
+        </div>
+        <div class="target-item">
+          <strong>.github/prompts/lore.prompt.md</strong>
+          Enables the <code>/lore</code> prompt in Copilot Chat to pull chronicle context on demand.
+        </div>
+        <div class="target-item">
+          <strong>Cursor, Gemini, Cline, Windsurf, Aider</strong>
+          Optional adapters you can keep enabled or disable through <code>.lore/config.yaml</code>.
+        </div>
+        <div class="target-item">
+          <strong>Atomic exports</strong>
+          Regeneration is all-or-nothing so a crash mid-write does not leave partial instruction files behind.
+        </div>
+      </div>
+      <div class="incantation"><span class="cmd">lore export</span><br><span class="cmd">lore export</span> <span class="arg">--format chronicle</span><br><span class="cmd">lore export</span> <span class="arg">--format prompt</span></div>
+    </section>
+
+    <!-- ══ THE SCRYING GLASS ══ -->
+    <section class="parchment">
+      <h2><span class="rune">🜂</span> The Scrying Glass</h2>
+      <p><strong>Lore</strong> ships a retro phosphor-green terminal browser — a full interactive TUI for browsing, searching, writing, and exporting your spellbook without leaving the command line.</p>
+      <div class="incantation"><span class="cmd">lore ui</span></div>
+      <ul class="spells" style="margin-top:1rem;">
+        <li><strong>Search</strong> — Semantic search across all spells as you type</li>
+        <li><strong>Browse</strong> — Navigate tomes and read entries in a split pane</li>
+        <li><strong>Add</strong> — Write new spells directly from the interface</li>
+        <li><strong>Export</strong> — Publish your Chronicle without leaving the TUI</li>
+        <li><strong>Live reload</strong> — Watches <code>.lore/</code> on disk and updates instantly</li>
+      </ul>
+      <p style="margin-top:1rem;font-style:italic;color:var(--ink-faded);">Open it in a split pane while you code — your full project memory, always one glance away.</p>
+    </section>
+
+    <!-- ══ RELICS AND DISTILLATION ══ -->
+    <section class="parchment">
+      <h2><span class="rune">🝮</span> Relics and Distillation</h2>
+      <p>When things are moving too fast to curate, capture the raw artifact first. Relics preserve noisy context as-is, then let you distill the verified parts into proper spells later.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>Capture</h3>
+          <p>Paste notes, import a file, snapshot a git diff, read from clipboard, or pipe in text from another tool.</p>
+          <div class="incantation"><span class="cmd">lore relic capture</span><br><span class="cmd">lore relic capture</span> <span class="arg">--git-diff --title "Pre-deploy changes"</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>Distill</h3>
+          <p>Walk the artifact spell by spell, choose the right tome, and keep a traceable link back to the source relic.</p>
+          <div class="incantation"><span class="cmd">lore relic distill</span> <span class="arg">&lt;id&gt;</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ INCANTATIONS ══ -->
+    <section class="parchment">
+      <h2><span class="rune">🜏</span> Incantations</h2>
+      <h3>Install via Homebrew</h3>
+      <div class="incantation"><span class="comment"># Bind the tap</span><br><span class="cmd">brew tap</span> <span class="arg">cptplastic/lore-book</span><br><span class="cmd">brew install</span> <span class="arg">lore-book</span></div>
+      <h3>Install via pip</h3>
+      <div class="incantation"><span class="cmd">pip install</span> <span class="arg">lore-book</span></div>
+      <h3>Cast your first spells</h3>
+      <div class="incantation"><span class="comment"># Record a decision</span><br><span class="cmd">lore add</span> <span class="arg">decisions</span> <span class="arg">"Use PostgreSQL — we need JSONB and row-level locking"</span><br><br><span class="comment"># Record a fact</span><br><span class="cmd">lore add</span> <span class="arg">facts</span> <span class="arg">"Auth service is the sole issuer of JWTs — never bypass it"</span><br><br><span class="comment"># Publish to all AI instruction files</span><br><span class="cmd">lore export</span></div>
+    </section>
+
+    <!-- ══ TRUST MODEL ══ -->
+    <section class="parchment">
+      <h2><span class="rune">⟁</span> Trust Model</h2>
+      <p>Lore is designed for layered trust. The chronicle should be reviewed, reliable memory. Raw intake belongs in relics first.</p>
+      <ul class="spells">
+        <li><strong>Shared trusted memory</strong> — Commit <code>CHRONICLE.md</code> when a fact or decision is reviewed and ready for everyone to inherit.</li>
+        <li><strong>Local working memory</strong> — Keep generated adapter files local by default so teams can share the chronicle without forcing every personal wrapper into git.</li>
+        <li><strong>Raw untrusted intake</strong> — Capture noisy sources with <code>lore relic capture</code>, then distill only verified points into spells.</li>
+        <li><strong>Confidence signals</strong> — Use tomes and tags like <code>verified</code>, <code>needs-review</code>, or <code>deprecated</code> to express trust clearly.</li>
+        <li><strong>Automated scoring</strong> — Recompute trust from git metadata with <code>lore trust refresh</code> and explain one score with <code>lore trust explain &lt;id&gt;</code>.</li>
+      </ul>
+      <div class="quote-block">Add candidate memory. Validate against code, tests, and docs. Export the chronicle. Commit only what you want every collaborator and every agent to inherit.</div>
+    </section>
+
+    <!-- ══ HOOKS, DAEMON, HEALTH ══ -->
+    <section class="parchment">
+      <h2><span class="rune">☄</span> Hooks, Daemon, and Health</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>Git Hooks</h3>
+          <p>Install a post-commit hook that can extract knowledge from commits and regenerate all export files automatically.</p>
+          <div class="incantation"><span class="cmd">lore hook install</span><br><span class="cmd">lore extract</span> <span class="arg">--last 20</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>Background Daemon</h3>
+          <p>Watch <code>.lore/</code> for changes and export the moment the memory store changes.</p>
+          <div class="incantation"><span class="cmd">lore awaken</span><br><span class="cmd">lore awaken</span> <span class="arg">--background</span><br><span class="cmd">lore slumber</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>Health Check</h3>
+          <p>Verify store readability, semantic search mode, endpoint reachability, and spell counts in one command.</p>
+          <div class="incantation"><span class="cmd">lore doctor</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>Release Smoke Test</h3>
+          <p>Run a clean isolated CLI smoke test before publishing to catch packaging and command regressions.</p>
+          <div class="incantation"><span class="cmd">./smoke.sh</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ GRIMOIRE OF COMMANDS ══ -->
+    <section class="parchment">
+      <h2><span class="rune">📖</span> Grimoire of Commands</h2>
+      <div class="command-columns">
+        <div class="command-item">
+          <strong>Store</strong>
+          <p><code>lore onboard</code>, <code>lore init</code>, <code>lore add</code>, <code>lore list</code>, <code>lore remove</code></p>
+        </div>
+        <div class="command-item">
+          <strong>Search</strong>
+          <p><code>lore search &lt;query&gt;</code>, <code>lore index rebuild</code>, <code>lore setup semantic</code></p>
+        </div>
+        <div class="command-item">
+          <strong>Relics</strong>
+          <p><code>lore relic capture</code>, <code>lore relic list</code>, <code>lore relic view</code>, <code>lore relic distill</code></p>
+        </div>
+        <div class="command-item">
+          <strong>Publishing</strong>
+          <p><code>lore export</code>, <code>lore export --format prompt</code>, <code>lore config &lt;key&gt; &lt;value&gt;</code></p>
+        </div>
+        <div class="command-item">
+          <strong>Trust and Security</strong>
+          <p><code>lore security</code>, <code>lore trust refresh</code>, <code>lore trust explain &lt;id&gt;</code></p>
+        </div>
+        <div class="command-item">
+          <strong>Automation</strong>
+          <p><code>lore hook install</code>, <code>lore awaken</code>, <code>lore slumber</code>, <code>lore doctor</code>, <code>lore ui</code></p>
+        </div>
+      </div>
+      <div class="links">
+        <a class="link-rune" href="https://github.com/CptPlastic/lore-book">✦ Source Repository</a>
+        <a class="link-rune" href="https://pypi.org/project/lore-book/">⚜ PyPI Package</a>
+      </div>
+    </section>
+
+    <div class="divider">— ✦ — ✦ — ✦ —</div>
+
+    <footer>LORE &nbsp;·&nbsp; CANONICAL DOCUMENTATION &nbsp;·&nbsp; FSL-1.1-MIT</footer>
+
+  </div>
 
   <script src="assets/javascripts/homebrew-legacy.js"></script>
 </body>
