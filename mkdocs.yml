@@ -6,10 +6,6 @@ repo_name: cptplastic/lore-book
 
 theme:
   name: material
-  palette:
-    - scheme: default
-      primary: teal
-      accent: amber
   features:
     - navigation.sections
     - navigation.top
@@ -17,16 +13,8 @@ theme:
 
 markdown_extensions:
   - admonition
-  - attr_list
-  - md_in_html
   - toc:
       permalink: true
-
-extra_css:
-  - assets/stylesheets/enchanted.css
-
-extra_javascript:
-  - assets/javascripts/sparkles.js
 
 nav:
   - Home: index.md
