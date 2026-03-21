@@ -1,0 +1,361 @@
+:root {
+  --parchment: #f5ead6;
+  --parchment-dark: #e8d5b0;
+  --ink: #2a1f0e;
+  --ink-faded: #5c4a2a;
+  --gold: #c8973a;
+  --gold-bright: #e8b84b;
+  --red: #8b1a1a;
+  --glow: rgba(200, 151, 58, 0.3);
+}
+
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap");
+
+.md-main {
+  background-color: #1a1208;
+  background-image:
+    radial-gradient(ellipse at 50% 0%, rgba(200, 151, 58, 0.08) 0%, transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+.md-content {
+  color: var(--ink);
+  font-family: "Crimson Text", Georgia, serif;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.md-content__inner {
+  margin: 0;
+  padding-top: 0;
+}
+
+.md-content__inner:before {
+  display: none;
+}
+
+.md-content h1,
+.md-content h2,
+.md-content h3,
+.md-header__title,
+.md-tabs__link {
+  font-family: "Cinzel", serif;
+}
+
+.legacy-home {
+  position: relative;
+  min-height: 100vh;
+}
+
+#sparkles {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 3rem 1rem 6rem;
+  position: relative;
+  z-index: 1;
+}
+
+.cover {
+  text-align: center;
+  padding: 4rem 2rem 3rem;
+  border-bottom: 2px solid var(--gold);
+  position: relative;
+}
+
+.cover::before,
+.cover::after {
+  display: block;
+  color: var(--gold);
+  letter-spacing: 0.5em;
+  font-size: 0.85rem;
+}
+
+.cover::before {
+  content: "✦ ✦ ✦";
+  margin-bottom: 1.5rem;
+}
+
+.cover::after {
+  content: "✦ ✦ ✦";
+  margin-top: 1.5rem;
+}
+
+.sigil {
+  font-size: 4rem;
+  line-height: 1;
+  margin-bottom: 1rem;
+  filter: drop-shadow(0 0 18px var(--gold-bright));
+}
+
+.cover h1 {
+  margin: 0;
+  font-size: clamp(2.8rem, 8vw, 5rem);
+  font-weight: 900;
+  color: var(--gold-bright);
+  text-shadow: 0 0 40px rgba(232, 184, 75, 0.4), 2px 2px 0 rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+}
+
+.subtitle {
+  font-family: "Cinzel", serif;
+  font-size: clamp(0.9rem, 2.5vw, 1.15rem);
+  color: var(--gold);
+  letter-spacing: 0.2em;
+  margin-top: 0.75rem;
+}
+
+.tagline {
+  font-style: italic;
+  color: var(--parchment-dark);
+  font-size: 1.2rem;
+  margin-top: 1.25rem;
+  opacity: 0.85;
+}
+
+.parchment {
+  background: var(--parchment);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+  border: 1px solid var(--gold);
+  border-radius: 2px;
+  padding: 2.5rem 3rem;
+  margin: 2.5rem 0;
+  box-shadow: 0 0 0 4px rgba(200, 151, 58, 0.15), 0 8px 40px rgba(0, 0, 0, 0.6), inset 0 0 60px rgba(200, 151, 58, 0.06);
+  position: relative;
+}
+
+.parchment::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgba(200, 151, 58, 0.25);
+  pointer-events: none;
+}
+
+.parchment h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--red);
+  letter-spacing: 0.12em;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.parchment h3 {
+  font-size: 1.05rem;
+  color: var(--ink-faded);
+  letter-spacing: 0.1em;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.parchment p {
+  color: var(--ink);
+  margin-bottom: 0.8rem;
+}
+
+.rune {
+  color: var(--gold);
+  font-size: 1.1em;
+}
+
+.scroll-diagram {
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(200, 151, 58, 0.35);
+  border-radius: 2px;
+  padding: 1.25rem 1.5rem;
+  margin: 1rem 0;
+  font-size: 0.95rem;
+  color: var(--ink-faded);
+  white-space: pre-wrap;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+.incantation {
+  background: #0f0a03;
+  border: 1px solid var(--gold);
+  border-radius: 2px;
+  padding: 1.25rem 1.5rem;
+  margin: 1rem 0;
+  font-family: "Courier New", monospace;
+  font-size: 0.92rem;
+  color: var(--gold-bright);
+  box-shadow: 0 0 20px rgba(200, 151, 58, 0.15), inset 0 0 30px rgba(0, 0, 0, 0.4);
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.badge-row,
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.ver-badge {
+  font-family: "Cinzel", serif;
+  font-size: 0.75rem;
+  color: var(--gold);
+  border: 1px solid rgba(200, 151, 58, 0.4);
+  padding: 0.2rem 0.7rem;
+  letter-spacing: 0.1em;
+}
+
+.target-list,
+.command-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 1rem;
+  margin-top: 1rem;
+}
+
+.target-item,
+.command-item {
+  border: 1px solid rgba(200, 151, 58, 0.3);
+  background: rgba(0, 0, 0, 0.04);
+  padding: 0.9rem 1rem;
+}
+
+.target-item strong,
+.command-item strong {
+  display: block;
+  font-family: "Cinzel", serif;
+  font-size: 0.9rem;
+  color: var(--red);
+  letter-spacing: 0.06em;
+  margin-bottom: 0.35rem;
+}
+
+.target-item a,
+.link-rune {
+  color: var(--red);
+  text-decoration: none;
+}
+
+.link-rune {
+  font-family: "Cinzel", serif;
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  border: 1px solid rgba(139, 26, 26, 0.4);
+  padding: 0.4rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s;
+}
+
+.link-rune:hover,
+.target-item a:hover {
+  color: var(--red);
+  text-decoration: underline;
+}
+
+.ritual-steps {
+  counter-reset: ritual;
+  list-style: none;
+  margin-top: 1rem;
+  padding-left: 0;
+}
+
+.ritual-steps li {
+  counter-increment: ritual;
+  padding: 0.8rem 0 0.8rem 3rem;
+  position: relative;
+  border-bottom: 1px dashed rgba(200, 151, 58, 0.28);
+}
+
+.ritual-steps li:last-child {
+  border-bottom: none;
+}
+
+.ritual-steps li::before {
+  content: counter(ritual);
+  position: absolute;
+  left: 0;
+  top: 0.62rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid rgba(139, 26, 26, 0.35);
+  color: var(--red);
+  font-family: "Cinzel", serif;
+  font-size: 0.95rem;
+  display: grid;
+  place-items: center;
+  background: rgba(139, 26, 26, 0.06);
+}
+
+.note {
+  background: rgba(200, 151, 58, 0.08);
+  border-left: 3px solid var(--gold);
+  padding: 0.9rem 1rem;
+  margin: 1rem 0;
+  color: var(--ink-faded);
+}
+
+.command-item code,
+.target-item code,
+.parchment p code,
+.parchment li code {
+  background: rgba(0, 0, 0, 0.07);
+  border: 1px solid rgba(200, 151, 58, 0.25);
+  padding: 0.08rem 0.35rem;
+  border-radius: 2px;
+  font-size: 0.95em;
+}
+
+.divider {
+  text-align: center;
+  color: var(--gold);
+  margin: 0.5rem 0;
+  letter-spacing: 0.6em;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.legacy-home footer {
+  text-align: center;
+  color: rgba(200, 151, 58, 0.4);
+  font-family: "Cinzel", serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  margin-top: 4rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(200, 151, 58, 0.2);
+}
+
+@media (max-width: 900px) {
+  .parchment {
+    padding: 2rem 1.5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .page {
+    padding: 2rem 0.5rem 4rem;
+  }
+
+  .cover {
+    padding: 3rem 1rem 2rem;
+  }
+
+  .tagline {
+    font-size: 1.05rem;
+  }
+
+  .target-list,
+  .command-columns {
+    grid-template-columns: 1fr;
+  }
+}

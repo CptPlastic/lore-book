@@ -48,6 +48,8 @@
       
     
     
+      <link rel="stylesheet" href="assets/stylesheets/homebrew-legacy.css">
+    
     <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
@@ -64,11 +66,6 @@
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
-      
-        
-        <a href="#lore" class="md-skip">
-          Skip to content
-        </a>
       
     </div>
     <div data-md-component="announce">
@@ -228,26 +225,6 @@
       <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
       
       
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
       
       <a href="." class="md-nav__link md-nav__link--active">
         
@@ -265,69 +242,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#start-here" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Start Here
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        How It Works
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quick-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick Example
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Notes
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
       
     </li>
   
@@ -458,60 +372,6 @@
   
   
   
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#start-here" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Start Here
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        How It Works
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quick-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick Example
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Notes
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
   
 </nav>
                   </div>
@@ -531,30 +391,139 @@
   
 
 
-<h1 id="lore">Lore<a class="headerlink" href="#lore" title="Permanent link">&para;</a></h1>
-<p>Lore is a local memory system for software projects.</p>
-<p>It captures decisions, facts, and lessons in plain files so your AI coding tools can use shared context across sessions.</p>
-<h2 id="start-here">Start Here<a class="headerlink" href="#start-here" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="install/">Install</a></li>
-<li><a href="concepts/">Core Concepts</a></li>
-<li><a href="cli/">CLI Reference</a></li>
-<li><a href="faq/">FAQ</a></li>
-</ul>
-<h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Add memory entries with <code>lore add</code>.</li>
-<li>Search memory with <code>lore search</code>.</li>
-<li>Export context files with <code>lore export</code>.</li>
-</ol>
-<h2 id="quick-example">Quick Example<a class="headerlink" href="#quick-example" title="Permanent link">&para;</a></h2>
-<pre><code class="language-bash">lore onboard
-lore add decisions &quot;Use PostgreSQL for row-level locking&quot;
-lore search &quot;why did we choose postgres&quot;
-lore export
-</code></pre>
-<h2 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h2>
-<p>If you are migrating existing docs, place markdown files in <code>docs/</code> and update navigation in <code>mkdocs.yml</code>.</p>
+<div class="legacy-home">
+    <canvas id="sparkles" aria-hidden="true"></canvas>
+
+    <div class="page">
+        <header class="cover">
+            <div class="sigil">📜</div>
+            <h1>Lore</h1>
+            <p class="subtitle">Keeper of the Chronicle</p>
+            <p class="tagline">The spellbook for your codebase: chronicle decisions, context, and lessons your AI companions can actually read.</p>
+        </header>
+
+        <section class="parchment">
+            <h2><span class="rune">✦</span> What is Lore?</h2>
+            <p>AI coding tools are stateless. They do not remember why you chose PostgreSQL over SQLite, which safety rules cannot be bypassed, or what tradeoffs already shaped this codebase.</p>
+            <p><strong>Lore</strong> fixes that. It is a local AI memory system for software projects. You capture knowledge once as plain files alongside your code, then export it into instruction files your tools can read automatically.</p>
+            <p>No external database. No API keys. No cloud sync. Everything lives in <code>.lore/</code> next to your repo.</p>
+            <div class="badge-row">
+                <span class="ver-badge">LOCAL YAML STORE</span>
+                <span class="ver-badge">CHRONICLE FIRST</span>
+                <span class="ver-badge">NO CLOUD SYNC</span>
+                <span class="ver-badge">TOOL-AGNOSTIC</span>
+            </div>
+        </section>
+
+        <section class="parchment">
+            <h2><span class="rune">⚜</span> The Three Artefacts</h2>
+
+            <h3>Spell</h3>
+            <p>A single piece of knowledge: a decision, a fact, a hard-won lesson, or a preference worth preserving.</p>
+
+            <h3>Tome</h3>
+            <p>A named collection of spells. Default tomes include <code>decisions</code>, <code>facts</code>, <code>preferences</code>, and <code>summaries</code>.</p>
+
+            <h3>Relic</h3>
+            <p>A raw artifact saved as-is for later distillation. Use relics when things are moving too fast to curate carefully in the moment.</p>
+        </section>
+
+        <section class="parchment">
+            <h2><span class="rune">✧</span> How the Magic Flows</h2>
+            <div class="scroll-diagram">Your decisions, facts and lessons
+                ↓  lore add / lore relic
+    .lore/  (plain YAML)
+                ↓  lore export
+CHRONICLE.md  ←  full project memory
+                ↓  referenced by lean adapters
+Copilot · Claude · Cursor · AGENTS · prompts
+                ↓
+Every AI tool reads your repo context</div>
+        </section>
+
+        <section class="parchment">
+            <h2><span class="rune">✶</span> First Invocation</h2>
+            <p>Start with onboarding. Lore walks through store setup, your first memory entry, and export flow in one guided ritual.</p>
+            <div class="incantation">lore onboard</div>
+            <ol class="ritual-steps">
+                <li><strong>Initialize the spellbook</strong> with a project description and local defaults.</li>
+                <li><strong>Record real knowledge</strong> as decisions, facts, preferences, or summaries.</li>
+                <li><strong>Export the chronicle</strong> so every supported AI tool inherits the same context.</li>
+                <li><strong>Enable semantic search</strong> later with <code>lore setup semantic</code> if you want dense embeddings.</li>
+            </ol>
+            <div class="note">Requirements: Python 3.10+. Dense vector search is optional. Lore falls back to TF-IDF when needed.</div>
+        </section>
+
+        <section class="parchment">
+            <h2><span class="rune">⌘</span> Start Here</h2>
+            <div class="target-list">
+                <div class="target-item">
+                    <strong><a href="install.md">Install</a></strong>
+                    Setup instructions for PyPI, local development, and semantic search extras.
+                </div>
+                <div class="target-item">
+                    <strong><a href="concepts.md">Core Concepts</a></strong>
+                    Understand spells, tomes, relics, and the chronicle model.
+                </div>
+                <div class="target-item">
+                    <strong><a href="cli.md">CLI Reference</a></strong>
+                    Learn the primary commands for capture, search, and export.
+                </div>
+                <div class="target-item">
+                    <strong><a href="faq.md">FAQ</a></strong>
+                    Short answers to common questions about storage, AI tools, and workflow.
+                </div>
+            </div>
+        </section>
+
+        <section class="parchment">
+            <h2><span class="rune">🜏</span> Incantations</h2>
+
+            <h3>Install via pip</h3>
+            <div class="incantation">pip install lore-book</div>
+
+            <h3>Local development</h3>
+            <div class="incantation">pip install -e .</div>
+
+            <h3>Cast your first spells</h3>
+            <div class="incantation">lore add decisions "Use PostgreSQL for row-level locking"
+lore add facts "Auth service is the sole issuer of JWTs"
+lore export</div>
+        </section>
+
+        <section class="parchment">
+            <h2><span class="rune">📖</span> Grimoire of Commands</h2>
+            <div class="command-columns">
+                <div class="command-item">
+                    <strong>Store</strong>
+                    <p><code>lore onboard</code>, <code>lore init</code>, <code>lore add</code>, <code>lore list</code>, <code>lore remove</code></p>
+                </div>
+                <div class="command-item">
+                    <strong>Search</strong>
+                    <p><code>lore search &lt;query&gt;</code>, <code>lore index rebuild</code>, <code>lore setup semantic</code></p>
+                </div>
+                <div class="command-item">
+                    <strong>Relics</strong>
+                    <p><code>lore relic capture</code>, <code>lore relic list</code>, <code>lore relic view</code>, <code>lore relic distill</code></p>
+                </div>
+                <div class="command-item">
+                    <strong>Publishing</strong>
+                    <p><code>lore export</code>, <code>lore export --format prompt</code>, <code>lore config &lt;key&gt; &lt;value&gt;</code></p>
+                </div>
+            </div>
+            <div class="links">
+                <a class="link-rune" href="https://github.com/CptPlastic/lore-book">✦ Source Repository</a>
+                <a class="link-rune" href="https://pypi.org/project/lore-book/">⚜ PyPI Package</a>
+            </div>
+        </section>
+
+        <div class="divider">— ✦ — ✦ — ✦ —</div>
+
+        <footer>
+            LORE · CANONICAL DOCUMENTATION · FSL-1.1-MIT
+        </footer>
+    </div>
+</div>
 
 
 
@@ -614,6 +583,8 @@ lore export
     
     
       <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="assets/javascripts/homebrew-legacy.js"></script>
       
     
   </body>
