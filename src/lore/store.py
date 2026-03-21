@@ -70,6 +70,9 @@ def add_memory(
 
     mem_id = _short_id()
     now = datetime.now(timezone.utc)
+    trust_cfg = config.get("trust", {})
+    default_trust = int(trust_cfg.get("default_score", 50))
+
     entry: dict[str, Any] = {
         "id": mem_id,
         "category": category,
@@ -77,11 +80,17 @@ def add_memory(
         "tags": tags or [],
         "source": source,
         "created_at": now.isoformat(),
+        "trust_score": max(0, min(100, default_trust)),
     }
     if gctx.get("branch"):
         entry["git_branch"] = gctx["branch"]
     if gctx.get("author"):
         entry["git_author"] = gctx["author"]
+    if source.startswith("git:"):
+        entry["source_commit"] = source.split(":", 2)[1] if ":" in source else None
+
+    from .trust import trust_level
+    entry["trust_level"] = trust_level(int(entry["trust_score"]))
     filename = f"{now.strftime('%Y%m%d%H%M%S')}_{mem_id}.yaml"
     path = cat_dir / filename
     with path.open("w") as f:

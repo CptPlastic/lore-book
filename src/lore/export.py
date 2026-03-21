@@ -149,7 +149,9 @@ def _render_lean_body(config: dict, root: Path, tool: str = "") -> str:
             body += instructions + "\n"
 
     body += (
-        "For full project memory, read **CHRONICLE.md** in the project root.  \n"
+        "**CHRONICLE.md** is the shared project memory file in this repository.  \n"
+        "It is the canonical source of reviewed decisions, facts, preferences, and summaries for all AI tools.  \n"
+        "For full context, read **CHRONICLE.md** before making non-trivial code changes.  \n"
         "When the user types `/lore`, read CHRONICLE.md before responding.\n"
     )
 
@@ -174,33 +176,102 @@ def _render_memories_markdown(root: Path) -> str:
     if not memories:
         return "_No memories stored yet._\n"
 
-    by_cat: dict[str, list] = defaultdict(list)
-    for m in memories:
-        by_cat[m.get("category", "facts")].append(m)
+    config = load_config(root)
+    trust_cfg = config.get("trust", {})
+    min_score = int(trust_cfg.get("chronicle_min_score", 0) or 0)
+    default_score = int(trust_cfg.get("default_score", 50) or 50)
+
+    filtered, skipped_low_trust = _filter_by_trust(memories, min_score, default_score)
+
+    if not filtered:
+        return "_No memories matched the current trust threshold for export._\n"
+
+    by_cat = _group_memories_by_category(filtered)
 
     lines: list[str] = []
+    if min_score > 0:
+        lines.append(
+            f"_Trust filter: exporting entries with trust score >= {min_score}. "
+            f"Skipped {skipped_low_trust} low-trust entr{'y' if skipped_low_trust == 1 else 'ies'}._\n"
+        )
 
-    # Instructions first — render without tag noise, note the scoped tool
-    if "instructions" in by_cat:
-        lines.append("## Instructions\n")
-        for e in by_cat["instructions"]:
-            content = e.get("content", "")
-            tags = [t for t in e.get("tags", []) if t not in ("all",)]
-            scope = f" _(scope: {', '.join(tags)})_" if tags else " _(scope: all)_"
-            lines.append(f"- {content}{scope}")
-        lines.append("")
-
-    for cat in sorted(by_cat):
-        if cat == "instructions":
-            continue  # already rendered above
-        lines.append(f"## {cat.capitalize()}\n")
-        for e in by_cat[cat]:
-            content = e.get("content", "")
-            tags = e.get("tags", [])
-            tag_str = f" _{', '.join(tags)}_" if tags else ""
-            lines.append(f"- {content}{tag_str}")
-        lines.append("")
+    _append_instruction_section(lines, by_cat, default_score)
+    _append_category_sections(lines, by_cat, default_score)
     return "\n".join(lines)
+
+
+def _filter_by_trust(
+    memories: list[dict[str, Any]],
+    min_score: int,
+    default_score: int,
+) -> tuple[list[dict[str, Any]], int]:
+    from .trust import memory_trust_score
+
+    filtered: list[dict[str, Any]] = []
+    skipped = 0
+    for entry in memories:
+        score = memory_trust_score(entry, default_score=default_score)
+        if score < min_score:
+            skipped += 1
+            continue
+        filtered.append(entry)
+    return filtered, skipped
+
+
+def _group_memories_by_category(memories: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    by_cat: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for memory in memories:
+        by_cat[memory.get("category", "facts")].append(memory)
+    return by_cat
+
+
+def _format_memory_line(
+    entry: dict[str, Any],
+    default_score: int,
+    scoped_instructions: bool = False,
+) -> str:
+    from .trust import memory_trust_score, trust_level
+
+    content = entry.get("content", "")
+    score = memory_trust_score(entry, default_score=default_score)
+    trust_part = f" _(trust: {trust_level(score)} {score})_"
+
+    if scoped_instructions:
+        tags = [t for t in entry.get("tags", []) if t not in ("all",)]
+        scope = f" _(scope: {', '.join(tags)})_" if tags else " _(scope: all)_"
+        return f"- {content}{scope}{trust_part}"
+
+    tags = entry.get("tags", [])
+    tag_str = f" _{', '.join(tags)}_" if tags else ""
+    return f"- {content}{tag_str}{trust_part}"
+
+
+def _append_instruction_section(
+    lines: list[str],
+    by_cat: dict[str, list[dict[str, Any]]],
+    default_score: int,
+) -> None:
+    if "instructions" not in by_cat:
+        return
+
+    lines.append("## Instructions\n")
+    for entry in by_cat["instructions"]:
+        lines.append(_format_memory_line(entry, default_score, scoped_instructions=True))
+    lines.append("")
+
+
+def _append_category_sections(
+    lines: list[str],
+    by_cat: dict[str, list[dict[str, Any]]],
+    default_score: int,
+) -> None:
+    for category in sorted(by_cat):
+        if category == "instructions":
+            continue
+        lines.append(f"## {category.capitalize()}\n")
+        for entry in by_cat[category]:
+            lines.append(_format_memory_line(entry, default_score))
+        lines.append("")
 
 
 def _datestamp() -> str:
@@ -367,7 +438,8 @@ def export_prompt(root: Path, out: Path | None = None) -> Path:
         "description: 'Load full project memory from CHRONICLE.md'\n"
         "---\n\n"
         f"{desc_line}"
-        "Read **CHRONICLE.md** in the project root and summarize the context "
+        "Read **CHRONICLE.md** in the project root (the canonical shared project memory) "
+        "and summarize the context "
         "most relevant to the current task. Focus on decisions, preferences, "
         "and facts that affect how code should be written in this project.\n"
     )

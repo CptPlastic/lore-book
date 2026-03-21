@@ -9,21 +9,36 @@ import yaml
 MEMORY_DIR = ".lore"
 CONFIG_FILE = "config.yaml"
 
+# Generated adapter files that should remain local by default.
+# CHRONICLE.md is intentionally excluded so teams can commit shared memory.
+LOCAL_AGENT_FILES = [
+    ".github/copilot-instructions.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".cursor/rules/memory.md",
+    ".github/prompts/lore.prompt.md",
+    ".windsurfrules",
+    "GEMINI.md",
+    ".clinerules",
+    "CONVENTIONS.md",
+]
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "version": 1,
     "project_description": "",
     "categories": ["decisions", "facts", "instructions", "preferences", "summaries"],
     "export_targets": {
         "chronicle": True,   # full memory file — lean instruction files reference this
+        # Security-first defaults: export all adapters unless users disable them.
         "agents":    True,
         "copilot":   True,
         "cursor":    True,
         "claude":    True,
-        "windsurf":  False,  # opt-in: .windsurfrules for Windsurf/Codeium
-        "gemini":    False,  # opt-in: GEMINI.md for Gemini CLI
-        "cline":     False,  # opt-in: .clinerules for Cline (VS Code agent)
-        "aider":     False,  # opt-in: CONVENTIONS.md for Aider
-        "prompt":    True,   # .github/prompts/lore.prompt.md — invokable as /lore
+        "windsurf":  True,
+        "gemini":    True,
+        "cline":     True,
+        "aider":     True,
+        "prompt":    True,
     },
     "embedding_model": "all-MiniLM-L6-v2",
     # Default to the public Hugging Face Hub.
@@ -41,6 +56,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "security_policy": "SECURITY.md",
         "codeowners": True,
         "custom_rules": [],
+    },
+    # Trust scoring controls for shared chronicle export and ranking.
+    "trust": {
+        "default_score": 50,
+        "chronicle_min_score": 0,
+        "lookback_commits": 200,
+        "trusted_authors": [],
+        "author_weights": {},
     },
 }
 

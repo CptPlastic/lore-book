@@ -6,6 +6,8 @@
 
 No external database. No API keys. No cloud sync. Everything lives in `.lore/` next to your code.
 
+By default, lore exports **CHRONICLE.md plus all agent adapter files** so security and instruction preambles are consistently written for every tool.
+
 ---
 
 ## How it works
@@ -70,19 +72,21 @@ A relic can be anything: a pasted session log, a git diff, a doc excerpt from Co
 | `CLAUDE.md` | Anthropic Claude | ✅ |
 | `.cursor/rules/memory.md` | Cursor | ✅ |
 | `.github/prompts/lore.prompt.md` | `/lore` trigger in Copilot Chat | ✅ |
-| `.windsurfrules` | Windsurf / Codeium | opt-in |
-| `GEMINI.md` | Gemini CLI | opt-in |
-| `.clinerules` | Cline | opt-in |
-| `CONVENTIONS.md` | Aider | opt-in |
+| `.windsurfrules` | Windsurf / Codeium | ✅ |
+| `GEMINI.md` | Gemini CLI | ✅ |
+| `.clinerules` | Cline | ✅ |
+| `CONVENTIONS.md` | Aider | ✅ |
 
 Lean instruction files are intentionally small — they contain your project description, security preamble, and a single line telling the AI to read `CHRONICLE.md` for full context. This keeps per-request token overhead minimal.
 
-To enable opt-in targets, set them in `.lore/config.yaml`:
+To disable targets after onboarding, set them in `.lore/config.yaml`:
 
 ```yaml
 export_targets:
-  cline: true
-  aider: true
+  windsurf: false
+  gemini: false
+  cline: false
+  aider: false
 ```
 
 Exports are atomic — a crash mid-write never leaves a partial file.
@@ -101,7 +105,35 @@ For local development:
 pip install -e .
 ```
 
-**Requirements:** Python 3.10+. Semantic search uses `sentence-transformers` (downloaded once, ~80 MB) from the default Hugging Face endpoint (`https://huggingface.co`). If the model is unavailable, a TF-IDF fallback kicks in automatically — no configuration needed.
+**Requirements:** Python 3.10+. Lore works out of the box with TF-IDF search. Dense vector search (sentence-transformers) is optional and can be enabled with the setup wizard below.
+
+### Enable dense vector search (wizard)
+
+Want dense vector search? Run:
+
+```sh
+lore setup semantic
+```
+
+The wizard will:
+
+- check whether `sentence-transformers` is installed
+- offer to install semantic dependencies if missing
+- validate model loading with your configured `embedding_model`, `model_endpoint`, and SSL settings
+
+If you prefer non-interactive setup:
+
+```sh
+lore setup semantic --install-now
+```
+
+Default endpoint for Hugging Face models is:
+
+```text
+https://huggingface.co
+```
+
+If dense model loading fails, lore automatically falls back to TF-IDF so search still works.
 
 ---
 
@@ -112,6 +144,8 @@ lore onboard
 ```
 
 The onboarding command explains every concept, walks you through store setup, security policy, your first spell, and publishing — with an interactive step-by-step flow. It also prompts for a **project description** (auto-detected from `pyproject.toml` or README) that appears at the top of every lean instruction file. Start here if you're new.
+
+Onboard/Init also add local adapter files to `.gitignore` by default, so only shared chronicle memory is committed unless you choose otherwise.
 
 ---
 
@@ -203,7 +237,7 @@ Each spell links back to its source relic. The tome selection is sticky — afte
 ## Exporting AI context files
 
 ```sh
-# Write all AI context files (CHRONICLE.md + all enabled lean files)
+# Write all enabled context files (default: CHRONICLE + all adapters)
 lore export
 
 # Write one target only
@@ -221,11 +255,73 @@ lore export --format aider
 
 If no `project_description` is set, `lore export` will remind you to run `lore onboard` — lean instruction files are more useful with a one-line project summary at the top.
 
-Exports are regenerated every run and are safe to commit. The git hook can automate this on every commit (see below).
+Exports are regenerated every run. Adapter files are gitignored by default, so teams can commit only `CHRONICLE.md` unless they opt into versioning adapter files.
 
 ### The `/lore` trigger
 
 The `prompt` export target writes `.github/prompts/lore.prompt.md`. In GitHub Copilot Chat, type `/lore` to invoke it — the AI will read `CHRONICLE.md` and surface context relevant to your current task. No setup beyond running `lore export`.
+
+## Trust model (how to use it as a user)
+
+Treat lore memory as layered trust, even before advanced trust metadata exists:
+
+1. **Shared trusted memory (commit this)**
+- `CHRONICLE.md` is your canonical reviewed memory.
+- Only include decisions/facts you want every collaborator and agent to inherit.
+
+2. **Local working memory (do not commit)**
+- Keep generated adapter files (`AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, etc.) local by default.
+- Use them as personal tool wrappers around the same shared chronicle.
+
+3. **Raw untrusted intake**
+- Capture noisy inputs as relics first (`lore relic capture`).
+- Distill only verified points into spells (`lore relic distill`).
+
+4. **Practical review loop**
+- Add candidate memory.
+- Validate against code/tests/docs.
+- Export chronicle.
+- Commit `CHRONICLE.md` only when reviewed.
+
+5. **Trust signals you can use today**
+- Reserve `decisions` and `facts` for high-confidence entries.
+- Use tags to mark confidence state (for example: `verified`, `needs-review`, `deprecated`).
+- Move or remove stale entries quickly with `lore remove` + re-add in correct form.
+
+### Automate trust scoring from git
+
+You can auto-score existing memories from git metadata (author, source, activity, tags):
+
+```sh
+lore trust refresh
+```
+
+Preview only (no writes):
+
+```sh
+lore trust refresh --dry-run
+```
+
+Explain one memory's score:
+
+```sh
+lore trust explain <id>
+lore trust explain <id> --recompute
+```
+
+Tune trust thresholds in `.lore/config.yaml`:
+
+```yaml
+trust:
+  default_score: 50
+  chronicle_min_score: 60
+  trusted_authors:
+    - "Your Name"
+  author_weights:
+    "Release Bot": 10
+```
+
+When `chronicle_min_score` is greater than `0`, `lore export` includes only entries at or above that score in `CHRONICLE.md`.
 
 ---
 
@@ -295,7 +391,7 @@ This is especially useful in GitHub Enterprise environments where Copilot should
 
 Each spell and relic is a plain YAML file. No database engine, no lock files, no proprietary format. You can read, edit, and commit them directly.
 
-`.lore/` is automatically added to `.gitignore` on `lore init` — your memories stay local unless you explicitly opt in to committing them.
+`.lore/` is automatically added to `.gitignore` on `lore init`. Local adapter exports are also gitignored by default so teams can commit only `CHRONICLE.md` as shared memory.
 
 ---
 
@@ -338,6 +434,28 @@ Reports:
 - Whether the configured model endpoint is reachable
 - Counts of spells by tome and relics
 
+## Release smoke test
+
+Run a clean, isolated CLI smoke test before publishing:
+
+```sh
+./smoke.sh
+```
+
+What it does:
+
+- creates a temporary workspace + virtualenv
+- installs the current project as a normal package (`pip install .`)
+- runs `lore version`, `lore init`, `lore add`, `lore trust refresh --dry-run`, and `lore export --format chronicle`
+- exits non-zero on failure
+
+Optional environment variables:
+
+```sh
+PYTHON_BIN=python3.12 ./smoke.sh
+KEEP_SMOKE=1 ./smoke.sh
+```
+
 ---
 
 ## Corporate proxy / Artifactory
@@ -368,6 +486,8 @@ Run `lore doctor` to confirm the model downloads and loads from your endpoint.
 | `config` | `<key> <value>` | Set a config value |
 | `security` | | Configure the security preamble for exports |
 | `doctor` | | Store + model health report |
+| `trust refresh` | `[--dry-run]` | Recompute trust scores/levels from git + memory metadata |
+| `trust explain` | `<id> [--recompute]` | Show trust signals and scoring reasons for one memory |
 | `hook install` | | Install git post-commit hook (wizard) |
 | `hook uninstall` | | Safely remove the lore-managed git hook |
 | `index rebuild` | | Rebuild the semantic search index from scratch |

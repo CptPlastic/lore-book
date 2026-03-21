@@ -14,3 +14,11 @@ AGENTS.md
 
 CLAUDE.md
 .DS_Store
+.lore/
+.github/prompts/lore.prompt.md
+.windsurfrules
+GEMINI.md
+.clinerules
+CONVENTIONS.md
+.venv
+.venv-smoke

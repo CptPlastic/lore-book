@@ -13,6 +13,7 @@ from rich.panel import Panel
 from rich import box
 
 from . import __version__
+from .config import LOCAL_AGENT_FILES
 
 # ---------------------------------------------------------------------------
 # Palette (mirrors tui.py so help screen feels consistent)
@@ -23,6 +24,7 @@ _A  = "#ffaa00"   # amber
 _AD = "#996600"   # dim amber
 _BG = "#080c08"
 _BD = "#1a6606"   # border
+_LORE_GITIGNORE_ENTRY = ".lore/"
 
 _BANNER_TEXT = f"[bold {_A}]L · O · R · E   -   AI  PROJECT  MEMORY   v{__version__}[/bold {_A}]"
 
@@ -43,9 +45,13 @@ app = typer.Typer(
 hook_app  = typer.Typer(help="Manage git hooks.")
 index_app = typer.Typer(help="Manage the embedding index.")
 relic_app = typer.Typer(help="Capture and manage relics - rich session artifacts.")
+setup_app = typer.Typer(help="Guided setup helpers.")
+trust_app = typer.Typer(help="Trust scoring and trust metadata tools.")
 app.add_typer(hook_app,  name="hook")
 app.add_typer(index_app, name="index")
 app.add_typer(relic_app, name="relic")
+app.add_typer(setup_app, name="setup")
+app.add_typer(trust_app, name="trust")
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +105,9 @@ _MORE_ROWS = [
     ("extract",       "\\[--last N]",             "pull memories from recent git commits"),
     ("init",          "\\[path]",                 "create a .lore store in a directory"),
     ("doctor",        "",                        "check store, model, and search status"),
+    ("setup",         "semantic",                "guided setup for dense vector search"),
+    ("trust",         "refresh",                 "recompute memory trust from git signals"),
+    ("trust",         "explain <id>",            "show trust score inputs for one memory"),
     ("awaken",        "\\[--background]",         "👁  watch .lore and auto-export on change"),
     ("slumber",       "",                        "banish the background daemon"),
     ("config",        "<key> <value>",           "set a config value"),
@@ -183,6 +192,27 @@ def _require_root() -> Path:
     return root
 
 
+def _ensure_gitignore_entries(root: Path, entries: list[str]) -> list[str]:
+    """Ensure each entry exists in .gitignore; returns entries added this run."""
+    gitignore = root / ".gitignore"
+    if gitignore.exists():
+        lines = gitignore.read_text().splitlines()
+    else:
+        lines = []
+
+    existing = set(lines)
+    added: list[str] = []
+    for entry in entries:
+        if entry not in existing:
+            lines.append(entry)
+            existing.add(entry)
+            added.append(entry)
+
+    if added:
+        gitignore.write_text("\n".join(lines).rstrip() + "\n")
+    return added
+
+
 # ---------------------------------------------------------------------------
 # mem init
 # ---------------------------------------------------------------------------
@@ -208,18 +238,10 @@ def init(
             f"  Run [bold]git init[/bold] first if you need those features.[/dim]"
         )
         console.print()
-    # Add .lore to .gitignore if inside a git repo
-    gitignore = root / ".gitignore"
-    entry = ".lore/"
-    if gitignore.exists():
-        lines = gitignore.read_text().splitlines()
-        if entry not in lines:
-            with gitignore.open("a") as f:
-                f.write(f"\n{entry}\n")
-            console.print(f"[dim]Added {entry} to .gitignore[/dim]")
-    else:
-        gitignore.write_text(f"{entry}\n")
-        console.print(f"[dim]Created .gitignore with {entry}[/dim]")
+    # Shared-chronicle mode: commit CHRONICLE.md, keep local adapter files uncommitted.
+    added = _ensure_gitignore_entries(root, [_LORE_GITIGNORE_ENTRY, *LOCAL_AGENT_FILES])
+    for entry in added:
+        console.print(f"[dim]Added {entry} to .gitignore[/dim]")
     console.print(f"[green]Initialized lore store at[/green] {root / '.lore'}")
     console.print()
     console.print(
@@ -233,6 +255,7 @@ def init(
             style=f"on {_BG}",
         )
     )
+    console.print("  [dim]Want dense vector search? Run [bold]lore setup semantic[/bold].[/dim]")
 
 
 def _detect_project_description(root: Path) -> str:
@@ -357,18 +380,14 @@ def onboard() -> None:
         console.print()
         from .store import init_store
         init_store(dest)
-        gitignore = dest / ".gitignore"
-        entry = ".lore/"
-        if gitignore.exists():
-            lines = gitignore.read_text().splitlines()
-            if entry not in lines:
-                with gitignore.open("a") as f:
-                    f.write(f"\n{entry}\n")
-        else:
-            gitignore.write_text(f"{entry}\n")
+        _ensure_gitignore_entries(dest, [_LORE_GITIGNORE_ENTRY, *LOCAL_AGENT_FILES])
         root = dest
         _beat(f"  [bold {_P}]✓[/bold {_P}]  The sanctum has been forged at [bold]{root / '.lore'}[/bold]")
         _beat(f"  [dim]The gates have been hidden from git's eye.[/dim]")
+
+    added = _ensure_gitignore_entries(root, [_LORE_GITIGNORE_ENTRY, *LOCAL_AGENT_FILES])
+    if added:
+        _beat(f"  [bold {_P}]✓[/bold {_P}]  Local adapter files were added to .gitignore.")
 
     cfg = load_config(root)
 
@@ -503,7 +522,10 @@ def onboard() -> None:
     _beat(f"  [dim]The final rite: transcribe the chronicle into the languages")
     _beat(f"  [dim]your AI companions can read.[/dim]")
     console.print()
-    _beat(f"  [dim]This writes:[/dim]")
+    _beat(f"  [dim]By default, lore writes [bold]CHRONICLE.md[/bold] and all agent adapter files.[/dim]")
+    _beat(f"  [dim]Adapter files are gitignored by default, so users can opt into committing them later.[/dim]")
+    console.print()
+    _beat(f"  [dim]Adapter files include:[/dim]")
     _beat(f"  [dim]  · [bold].github/copilot-instructions.md[/bold]  - GitHub Copilot[/dim]", 0.15)
     _beat(f"  [dim]  · [bold]AGENTS.md[/bold]                        - OpenAI Codex / agents[/dim]", 0.15)
     _beat(f"  [dim]  · [bold]CLAUDE.md[/bold]                        - Anthropic Claude[/dim]", 0.15)
@@ -532,6 +554,7 @@ def onboard() -> None:
     console.print()
     _beat(f"    [bold {_P}]lore add[/bold {_P}]                  [dim]Record a spell (interactive)[/dim]", 0.1)
     _beat(f"    [bold {_P}]lore search <query>[/bold {_P}]       [dim]Find spells semantically[/dim]", 0.1)
+    _beat(f"    [bold {_P}]lore setup semantic[/bold {_P}]     [dim]Enable dense vector search (guided)[/dim]", 0.1)
     _beat(f"    [bold {_P}]lore export[/bold {_P}]               [dim]Republish AI context files[/dim]", 0.1)
     _beat(f"    [bold {_P}]lore relic capture --git-diff[/bold {_P}] [dim]Capture a raw artifact[/dim]", 0.1)
     _beat(f"    [bold {_P}]lore relic distill <id>[/bold {_P}]  [dim]Extract spells from a relic[/dim]", 0.1)
@@ -1225,6 +1248,279 @@ def index_rebuild() -> None:
 
 
 # ---------------------------------------------------------------------------
+# lore setup semantic
+# ---------------------------------------------------------------------------
+
+@setup_app.command("semantic")
+def setup_semantic(
+    install_now: Annotated[
+        bool,
+        typer.Option("--install-now", help="Install semantic dependencies without prompting"),
+    ] = False,
+) -> None:
+    """Guided setup for dense vector search (sentence-transformers)."""
+    import subprocess
+    import sys
+    from io import StringIO
+    from rich.prompt import Confirm
+
+    from .config import load_config
+
+    root = _require_root()
+    cfg = load_config(root)
+    endpoint = cfg.get("model_endpoint") or "https://huggingface.co"
+    ssl_verify = cfg.get("model_ssl_verify", True)
+    model_name = cfg.get("embedding_model", "all-MiniLM-L6-v2")
+
+    console.print()
+    console.print(Panel(
+        f"[bold {_A}]Dense Vector Search Setup[/bold {_A}]\n"
+        f"[dim]Want dense vector search? This wizard enables and validates semantic embeddings.[/dim]",
+        border_style=_BD, padding=(1, 2), style=f"on {_BG}",
+    ))
+    console.print(f"  [dim]Model   :[/dim] [bold]{model_name}[/bold]")
+    console.print(f"  [dim]Endpoint:[/dim] [bold]{endpoint}[/bold]")
+    console.print(f"  [dim]SSL     :[/dim] {'enabled' if ssl_verify else 'disabled'}")
+    console.print()
+
+    dep_ok = True
+    try:
+        import sentence_transformers  # noqa: F401
+    except Exception:
+        dep_ok = False
+
+    install_cmd = f'"{sys.executable}" -m pip install "lore-book[semantic]"'
+    if not dep_ok:
+        console.print(f"  [bold {_A}]▲[/bold {_A}] [bold]sentence-transformers[/bold] is not installed.")
+        console.print(f"  [dim]Install command:[/dim] {install_cmd}")
+        console.print()
+        should_install = install_now or Confirm.ask(
+            f"  [bold {_P}]Install semantic dependencies now?[/bold {_P}]",
+            default=True,
+        )
+        if not should_install:
+            console.print(f"\n  [dim]Skipped install. Run [bold]lore setup semantic[/bold] any time to continue.[/dim]")
+            raise typer.Exit(code=1)
+
+        with console.status("Installing semantic dependencies…"):
+            proc = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "lore-book[semantic]"],
+                capture_output=True,
+                text=True,
+            )
+
+        if proc.returncode != 0:
+            err_console.print("[red]Install failed.[/red]")
+            tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+            if tail:
+                err_console.print(f"[dim]{tail[-1]}[/dim]")
+            err_console.print(f"[dim]Try manually:[/dim] {install_cmd}")
+            raise typer.Exit(code=1)
+
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  Dependencies installed.")
+        console.print()
+
+    console.print(f"  [{_A}]Checking model load…[/{_A}]", end=" ")
+    try:
+        import logging
+        import warnings
+
+        for logger_name in (
+            "huggingface_hub", "huggingface_hub.file_download",
+            "huggingface_hub.utils", "sentence_transformers",
+            "urllib3", "tqdm",
+        ):
+            logging.getLogger(logger_name).setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
+
+        if endpoint:
+            os.environ["HF_ENDPOINT"] = endpoint.rstrip("/")
+
+        _orig_ssl_ctx = None
+        if not ssl_verify:
+            import ssl as _ssl_mod
+            os.environ["CURL_CA_BUNDLE"] = ""
+            os.environ["REQUESTS_CA_BUNDLE"] = ""
+            _orig_ssl_ctx = _ssl_mod._create_default_https_context  # noqa: SLF001
+            _ssl_mod._create_default_https_context = _ssl_mod._create_unverified_context  # noqa: SLF001
+
+        from sentence_transformers import SentenceTransformer
+        _old_out, _old_err = sys.stdout, sys.stderr
+        sys.stdout = sys.stderr = StringIO()
+        try:
+            SentenceTransformer(model_name)
+        finally:
+            sys.stdout, sys.stderr = _old_out, _old_err
+            if _orig_ssl_ctx is not None:
+                import ssl as _ssl_mod
+                _ssl_mod._create_default_https_context = _orig_ssl_ctx  # noqa: SLF001
+
+        console.print(f"[bold {_P}]ready ✓[/bold {_P}]")
+        console.print(f"\n  [bold {_P}]Dense vector search is enabled.[/bold {_P}]")
+        console.print(f"  [dim]Try:[/dim] [bold]lore search \"your query\"[/bold]")
+    except Exception as exc:
+        console.print(f"[bold {_A}]unavailable[/bold {_A}]")
+        err_console.print(f"  [bold {_A}]▲[/bold {_A}] Could not load model: [dim]{exc}[/dim]")
+        err_console.print(
+            f"  [dim]Check endpoint/SSL settings with [bold]lore config[/bold], then re-run "
+            f"[bold]lore setup semantic[/bold].[/dim]"
+        )
+        raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# lore trust refresh
+# ---------------------------------------------------------------------------
+
+@trust_app.command("refresh")
+def trust_refresh(
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show what would change without writing files"),
+    ] = False,
+) -> None:
+    """Recompute trust score/level metadata for all stored memories."""
+    from datetime import datetime, timezone
+
+    from .config import load_config
+    from .store import list_memories, update_memory
+    from .trust import build_author_activity_bonus, score_memory, trust_level
+
+    root = _require_root()
+    cfg = load_config(root)
+    memories = list_memories(root)
+
+    if not memories:
+        console.print("[yellow]No memories found. Add entries first with lore add.[/yellow]")
+        return
+
+    with console.status("Scoring trust from git and metadata signals…"):
+        bonuses = build_author_activity_bonus(root, cfg)
+
+        changed = 0
+        level_counts = {"high": 0, "medium": 0, "low": 0}
+        for entry in memories:
+            score, reasons = score_memory(root, entry, cfg, author_activity_bonus=bonuses)
+            level = trust_level(score)
+            level_counts[level] += 1
+
+            source = (entry.get("source") or "")
+            source_commit = entry.get("source_commit")
+            if source.startswith("git:") and not source_commit:
+                parts = source.split(":", 2)
+                source_commit = parts[1] if len(parts) > 1 else None
+
+            if (
+                entry.get("trust_score") != score
+                or entry.get("trust_level") != level
+                or entry.get("trust_reasons") != reasons
+                or (source_commit and entry.get("source_commit") != source_commit)
+            ):
+                changed += 1
+                if not dry_run:
+                    updates: dict[str, object] = {
+                        "trust_score": score,
+                        "trust_level": level,
+                        "trust_reasons": reasons,
+                        "trust_updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    if source_commit:
+                        updates["source_commit"] = source_commit
+                    update_memory(root, entry["id"], updates)
+
+    mode = "(dry run) " if dry_run else ""
+    console.print(
+        f"[green]{mode}Trust refresh complete.[/green] "
+        f"Updated [bold]{changed}[/bold] of [bold]{len(memories)}[/bold] entries."
+    )
+    console.print(
+        "Distribution: "
+        f"high={level_counts['high']}  "
+        f"medium={level_counts['medium']}  "
+        f"low={level_counts['low']}"
+    )
+
+
+@trust_app.command("explain")
+def trust_explain(
+    mem_id: Annotated[str, typer.Argument(help="Memory ID (full or prefix)")],
+    recompute: Annotated[
+        bool,
+        typer.Option("--recompute", help="Recompute score now instead of using stored reasons"),
+    ] = False,
+) -> None:
+    """Show how a memory's trust score was derived."""
+    from .config import load_config
+    from .store import list_memories
+    from .trust import (
+        build_author_activity_bonus,
+        memory_trust_score,
+        score_memory,
+        trust_level,
+    )
+
+    root = _require_root()
+    cfg = load_config(root)
+    memories = list_memories(root)
+
+    matches = [m for m in memories if str(m.get("id", "")).startswith(mem_id)]
+    if not matches:
+        err_console.print(f"[red]No memory found for id/prefix '{mem_id}'.[/red]")
+        raise typer.Exit(code=1)
+    if len(matches) > 1:
+        ids = ", ".join(m.get("id", "?") for m in matches[:8])
+        err_console.print(
+            "[red]ID prefix is ambiguous.[/red] "
+            f"Matches: [dim]{ids}{'…' if len(matches) > 8 else ''}[/dim]"
+        )
+        raise typer.Exit(code=1)
+
+    entry = matches[0]
+    default_score = int(cfg.get("trust", {}).get("default_score", 50) or 50)
+
+    stored_score = memory_trust_score(entry, default_score=default_score)
+    stored_level = entry.get("trust_level") or trust_level(stored_score)
+    stored_reasons = entry.get("trust_reasons") or []
+
+    live_score = stored_score
+    live_level = stored_level
+    live_reasons = list(stored_reasons)
+
+    if recompute or not live_reasons:
+        bonuses = build_author_activity_bonus(root, cfg)
+        live_score, live_reasons = score_memory(root, entry, cfg, author_activity_bonus=bonuses)
+        live_level = trust_level(live_score)
+
+    console.print()
+    console.print(f"[bold]Memory[/bold] {entry.get('id', '?')}  [dim]({entry.get('category', 'facts')})[/dim]")
+    console.print(f"[dim]{entry.get('content', '').strip()}[/dim]")
+    console.print()
+
+    console.print(
+        f"Stored trust: [bold]{stored_level} {stored_score}[/bold]"
+        + (" [dim](from last refresh)[/dim]" if stored_reasons else " [dim](default/no reasons stored)[/dim]")
+    )
+    console.print(f"Current trust: [bold]{live_level} {live_score}[/bold]")
+
+    if live_reasons:
+        console.print("\n[bold]Reasons[/bold]")
+        for reason in live_reasons:
+            console.print(f"- {reason}")
+
+    source = entry.get("source")
+    author = entry.get("git_author")
+    tags = entry.get("tags") or []
+    if source or author or tags:
+        console.print("\n[bold]Signals[/bold]")
+        if source:
+            console.print(f"- source: {source}")
+        if author:
+            console.print(f"- git_author: {author}")
+        if tags:
+            console.print(f"- tags: {', '.join(tags)}")
+
+
+# ---------------------------------------------------------------------------
 # lore config
 # ---------------------------------------------------------------------------
 
@@ -1512,9 +1808,14 @@ def doctor() -> None:
         console.print(f"[bold {_A}]unavailable[/bold {_A}]")
         console.print(f"  {warn}  Falling back to TF-IDF search (no embeddings).")
         console.print(f"       [{_AD}]Reason: {exc}[/{_AD}]")
-        console.print(f"\n       [{_A}]To fix:[/{_A}] set [bold]model_endpoint[/bold] to an "
-                      "accessible HuggingFace mirror,")
-        console.print( "       or set [bold]model_ssl_verify false[/bold] if SSL is the only blocker.")
+        if "No module named 'sentence_transformers'" in str(exc):
+            console.print(f"\n       [{_A}]To fix:[/{_A}] install semantic dependencies:")
+            console.print( "       [bold]pip install \"lore-book[semantic]\"[/bold]")
+            console.print( "       [dim]or run [bold]lore setup semantic[/bold] for guided setup.[/dim]")
+        else:
+            console.print(f"\n       [{_A}]To fix:[/{_A}] set [bold]model_endpoint[/bold] to an "
+                          "accessible HuggingFace mirror,")
+            console.print( "       or set [bold]model_ssl_verify false[/bold] if SSL is the only blocker.")
     console.print()
 
 
