@@ -7,3 +7,6 @@
 ## Facts
 
 - smoke test WORKS _(trust: low 50)_
+- Make sure the site uses the same look and RPG, SIGIL / Storybook vibe. Do not use Mkdocs or any out of scope styles. _site, pages, html_ _(trust: low 50)_
+- auto-export after lore add is enabled _ux, workflow_ _(trust: low 50)_
+- testing auto-export is wired up _test_ _(trust: low 50)_

@@ -654,6 +654,10 @@ def add(
     console.print(
         f"  [bold {_P}]✓[/bold {_P}]  Saved [bold]{entry['id']}[/bold] → [bold]{category}[/bold]"
     )
+    from .export import export_all
+    with console.status("Updating chronicle…"):
+        export_all(root)
+    console.print(f"  [bold {_P}]✓[/bold {_P}]  Chronicle updated")
     console.print()
 
 
