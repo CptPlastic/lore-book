@@ -13,8 +13,16 @@ theme:
 
 markdown_extensions:
   - admonition
+  - attr_list
+  - md_in_html
   - toc:
       permalink: true
+
+extra_css:
+  - assets/stylesheets/homebrew-legacy.css
+
+extra_javascript:
+  - assets/javascripts/homebrew-legacy.js
 
 nav:
   - Home: index.md
