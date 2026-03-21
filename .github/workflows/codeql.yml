@@ -1,4 +1,4 @@
-name: CodeQL
+name: CodeQL Security Scan
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze (Python)
+    name: Analyze Python with CodeQL
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -26,11 +26,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Initialize CodeQL
+      - name: Initialize CodeQL (Python)
         uses: github/codeql-action/init@480db559a14342288b67e54bd959dd52dc3ee68f # v3
         with:
           languages: python
           build-mode: none
 
-      - name: Perform CodeQL Analysis
+      - name: Analyze and Upload SARIF
         uses: github/codeql-action/analyze@480db559a14342288b67e54bd959dd52dc3ee68f # v3
