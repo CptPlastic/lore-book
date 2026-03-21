@@ -6,7 +6,7 @@ class Lore < Formula
   url "https://files.pythonhosted.org/packages/cf/12/b6460a336540df5b0ee0cbdbc6f155e3eed5df43fa097d25991189905e0e/lore_book-0.1.4.tar.gz"
   sha256 "189cd4f5b8ce6e9381831a361e18357aed8d777f408d7b3d302bc34ced0cac3c"
 
-  license "MIT"
+  license "FSL-1.1-MIT"
 
   depends_on "python@3.12"
 

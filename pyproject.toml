@@ -7,7 +7,8 @@ name = "lore-book"
 dynamic = ["version"]
 description = "The spellbook for your codebase — chronicle decisions, lore, and context your AI companions can actually read."
 readme = "README.md"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
+license-expression = "FSL-1.1-MIT"
 authors = [
     {name = "Jason Johnson", email = "jrj@p7n.net"},
 ]
@@ -15,7 +16,7 @@ keywords = ["ai", "developer-tools", "documentation", "copilot", "context", "kno
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: Free For Non-Commercial Use",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
