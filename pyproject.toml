@@ -16,7 +16,6 @@ keywords = ["ai", "developer-tools", "documentation", "copilot", "context", "kno
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: Free For Non-Commercial Use",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
