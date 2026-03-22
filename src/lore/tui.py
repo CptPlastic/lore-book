@@ -275,7 +275,9 @@ class AddMemoryScreen(ModalScreen):
         border: solid {_BORDER}; margin-bottom: 1;
     }}
     .field-input:focus {{ border: solid {_AMBER}; color: {_PHOSPHOR_H}; }}
-    Select.field-input {{ height: 3; }}
+    Select.field-input {{ height: 3; border: none; padding: 0; }}
+    Select.field-input:focus {{ border: none; }}
+    Select.field-input > SelectCurrent {{ border: solid {_BORDER}; }}
     Select.field-input:focus > SelectCurrent {{ border: solid {_AMBER}; }}
     #new-cat-input {{ display: none; }}
     #new-cat-input.visible {{ display: block; }}
