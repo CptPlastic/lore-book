@@ -9,6 +9,30 @@ def _is_git_repo(root: Path) -> bool:
     return (root / ".git").is_dir()
 
 
+# Files lore writes itself — commits that only touch these are noise, not memory.
+_LORE_OUTPUT_FILES: frozenset[str] = frozenset({
+    "CHRONICLE.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    "CONVENTIONS.md",
+    ".windsurfrules",
+    ".clinerules",
+    ".github/copilot-instructions.md",
+    ".github/prompts/lore.prompt.md",
+    ".cursor/rules/memory.md",
+})
+
+
+def _is_lore_only_commit(commit) -> bool:
+    """True if a commit touches only lore-managed output files (export noise)."""
+    try:
+        changed = set(commit.stats.files.keys())
+    except Exception:
+        return False
+    return bool(changed) and changed.issubset(_LORE_OUTPUT_FILES)
+
+
 def git_context(root: Path) -> dict[str, Any]:
     """Return a dict of useful git metadata for the repo at *root*.
 
@@ -87,6 +111,8 @@ def extract_from_git(
     candidates: list[dict] = []
     for commit in repo.iter_commits(max_count=n_commits):
         if len(commit.parents) > 1:  # skip merge commits
+            continue
+        if _is_lore_only_commit(commit):  # skip lore export-only commits
             continue
         sha = commit.hexsha[:8]
         _extract_message(commit.message.strip(), sha, candidates)

@@ -13,6 +13,7 @@
 - Make sure build LIC stay in compliance _lic, legal_ _(trust: medium 66)_
 - Insure that memory fetches allways work and do not cause race conditions. _memory, race_ _(trust: medium 66)_
 - Keep LORE/RPG/SEGIL/STORYBOOK style _style_ _(trust: medium 66)_
+- Update CHRONICLE.md _(trust: low 50)_
 
 ## Summaries
 
