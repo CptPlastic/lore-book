@@ -6,13 +6,14 @@
 
 ## Facts
 
-- smoke test WORKS _(trust: low 50)_
-- Make sure the site uses the same look and RPG, SIGIL / Storybook vibe. Do not use Mkdocs or any out of scope styles. _site, pages, html_ _(trust: low 50)_
-- auto-export after lore add is enabled _ux, workflow_ _(trust: low 50)_
-- testing auto-export is wired up _test_ _(trust: low 50)_
-- Make sure build LIC stay in compliance _lic, legal_ _(trust: low 50)_
-- Insure that memory fetches allways work and do not cause race conditions. _memory, race_ _(trust: low 50)_
+- smoke test WORKS _(trust: medium 66)_
+- Make sure the site uses the same look and RPG, SIGIL / Storybook vibe. Do not use Mkdocs or any out of scope styles. _site, pages, html_ _(trust: medium 66)_
+- auto-export after lore add is enabled _ux, workflow_ _(trust: medium 66)_
+- testing auto-export is wired up _test_ _(trust: medium 66)_
+- Make sure build LIC stay in compliance _lic, legal_ _(trust: medium 66)_
+- Insure that memory fetches allways work and do not cause race conditions. _memory, race_ _(trust: medium 66)_
+- Keep LORE/RPG/SEGIL/STORYBOOK style _style_ _(trust: medium 66)_
 
 ## Summaries
 
-- memory entry and usage should flow clean with proper guides _memory_ _(trust: low 50)_
+- memory entry and usage should flow clean with proper guides _memory_ _(trust: medium 66)_
