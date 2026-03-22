@@ -14,6 +14,9 @@
 - Insure that memory fetches allways work and do not cause race conditions. _memory, race_ _(trust: medium 66)_
 - Keep LORE/RPG/SEGIL/STORYBOOK style _style_ _(trust: medium 66)_
 - Update CHRONICLE.md _(trust: low 50)_
+- Skip lore-generated files in git extraction
+
+Add a frozenset of known lore output files and a helper `_is_lore_only_commit(commit)` that detects commits touching only those files. Skip such commits in git extraction to avoid noise from lore export/auto-generated updates. Also include a minor CHRONICLE.md update. _(trust: low 50)_
 
 ## Summaries
 
