@@ -13,7 +13,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Footer, Input, Label, Static
+from textual.widgets import Button, DataTable, Footer, Input, Label, Select, Static
 
 from rich.markup import escape as _escape
 from .store import add_memory, list_memories, remove_memory, update_memory
@@ -50,6 +50,9 @@ _GLYPHS: dict[str, str] = {
     "preferences": "★",
     "summaries":   "◆",
 }
+
+# Canonical tomes shown in the category picker — order matters
+_TOMES: list[str] = list(_GLYPHS.keys())
 
 
 def _glyph(cat: str) -> str:
@@ -250,19 +253,11 @@ class AddMemoryScreen(ModalScreen):
 
     BINDINGS: ClassVar[list[Binding]] = []
 
-    def on_key(self, event) -> None:
-        """Explicitly route space into the focused Input (Textual 8.x workaround)."""
-        if event.key == "space" and isinstance(self.focused, Input):
-            inp = self.focused
-            pos = inp.cursor_position
-            inp.value = inp.value[:pos] + " " + inp.value[pos:]
-            inp.cursor_position = pos + 1
-            event.prevent_default()
-            event.stop()
-
-    _CAT     = "#cat-input"
-    _CONTENT = "#content-input"
-    _TAGS    = "#tags-input"
+    _NEW_TOME = "__new__"
+    _CAT      = "#cat-select"
+    _NEW_CAT  = "#new-cat-input"
+    _CONTENT  = "#content-input"
+    _TAGS     = "#tags-input"
 
     CSS = f"""
     AddMemoryScreen {{ align: center middle; }}
@@ -280,6 +275,10 @@ class AddMemoryScreen(ModalScreen):
         border: solid {_BORDER}; margin-bottom: 1;
     }}
     .field-input:focus {{ border: solid {_AMBER}; color: {_PHOSPHOR_H}; }}
+    Select.field-input {{ height: 3; }}
+    Select.field-input:focus > SelectCurrent {{ border: solid {_AMBER}; }}
+    #new-cat-input {{ display: none; }}
+    #new-cat-input.visible {{ display: block; }}
     #btn-row {{ height: auto; align: right middle; margin-top: 1; }}
     {_MODAL_BTN}
     #save {{
@@ -289,12 +288,34 @@ class AddMemoryScreen(ModalScreen):
     #save:hover {{ background: {_PHOSPHOR}; color: {_BG}; }}
     """
 
+    def __init__(self, categories: list[str]) -> None:
+        super().__init__()
+        self._categories = categories or _TOMES[:]
+
+    def on_key(self, event) -> None:
+        """Route space into focused Input (Textual 8.x workaround)."""
+        if event.key == "space" and isinstance(self.focused, Input):
+            inp = self.focused
+            pos = inp.cursor_position
+            inp.value = inp.value[:pos] + " " + inp.value[pos:]
+            inp.cursor_position = pos + 1
+            event.prevent_default()
+            event.stop()
+
     def compose(self) -> ComposeResult:
+        options = [(cat, cat) for cat in self._categories]
+        options.append(("+ new tome…", self._NEW_TOME))
         with Vertical(id="dialog"):
             yield Label("◈  ADD MEMORY  ◈", id="dialog-title", markup=False)
-            yield Label("CATEGORY", classes="field-label")
-            yield Input(placeholder="decisions / facts / preferences / summaries",
-                        id="cat-input", classes="field-input")
+            yield Label("TOME", classes="field-label")
+            yield Select(
+                options, value=self._categories[0],
+                id="cat-select", classes="field-input",
+            )
+            yield Input(
+                placeholder="name your new tome…",
+                id="new-cat-input", classes="field-input",
+            )
             yield Label("CONTENT", classes="field-label")
             yield Input(placeholder="What should lore remember?",
                         id="content-input", classes="field-input")
@@ -306,7 +327,24 @@ class AddMemoryScreen(ModalScreen):
                 yield Button("[[ SAVE  ]]", id="save")
 
     def on_mount(self) -> None:
-        self.call_after_refresh(self.query_one(self._CAT, Input).focus)
+        self.call_after_refresh(self.query_one(self._CONTENT, Input).focus)
+
+    @on(Select.Changed, "#cat-select")
+    def on_cat_changed(self, event: Select.Changed) -> None:
+        new_input = self.query_one(self._NEW_CAT, Input)
+        if event.value == self._NEW_TOME:
+            new_input.add_class("visible")
+            self.call_after_refresh(new_input.focus)
+        else:
+            new_input.remove_class("visible")
+            new_input.value = ""
+
+    def _resolved_category(self) -> str:
+        val = self.query_one(self._CAT, Select).value
+        if val == self._NEW_TOME or val == Select.BLANK:
+            custom = self.query_one(self._NEW_CAT, Input).value.strip()
+            return custom.lower().replace(" ", "_") or "facts"
+        return str(val)
 
     @on(Button.Pressed, "#cancel")
     def cancel(self) -> None:
@@ -314,9 +352,9 @@ class AddMemoryScreen(ModalScreen):
 
     @on(Button.Pressed, "#save")
     def save(self) -> None:
-        cat = self.query_one(self._CAT, Input).value.strip() or "facts"
+        cat = self._resolved_category()
         content = self.query_one(self._CONTENT, Input).value.strip()
-        tags_raw = self.query_one(self._TAGS, Input).value.strip()
+        tags_raw = self.query_one(self._TAGS,   Input).value.strip()
         tags = [t.strip() for t in tags_raw.split(",") if t.strip()] if tags_raw else []
         if not content:
             self.query_one(self._CONTENT, Input).focus()
@@ -325,7 +363,7 @@ class AddMemoryScreen(ModalScreen):
 
     @on(Input.Submitted)
     def on_submit(self, event: Input.Submitted) -> None:
-        if event.input.id == "cat-input":
+        if event.input.id == "new-cat-input":
             self.query_one(self._CONTENT, Input).focus()
         elif event.input.id == "content-input":
             self.query_one(self._TAGS, Input).focus()
@@ -523,6 +561,7 @@ class LoreApp(App):
     def on_mount(self) -> None:
         table = self.query_one(self._TABLE, DataTable)
         table.add_columns("ID", "CATEGORY", "CONTENT", "TAGS", "SOURCE")
+        self._set_status("▸ initializing…")
         self.load_memories()
         self._start_watcher()
 
@@ -675,7 +714,9 @@ class LoreApp(App):
     # ------------------------------------------------------------------
 
     def action_add_memory(self) -> None:
-        self.push_screen(AddMemoryScreen(), self._on_add_result)
+        existing = sorted({m.get("category", "") for m in self._all_memories if m.get("category")})
+        cats = list(dict.fromkeys(_TOMES + [c for c in existing if c not in _TOMES]))
+        self.push_screen(AddMemoryScreen(cats), self._on_add_result)
 
     def _on_add_result(self, result: dict | None) -> None:
         if not result:
@@ -790,9 +831,18 @@ class LoreApp(App):
     @work(thread=True)
     def _do_export(self) -> None:
         from .export import export_all
-        paths = export_all(self._root)
-        names = ", ".join(str(p.name) for p in paths)
-        self.call_from_thread(self._set_status, f"▸ ✓ exported: {names}")
+        try:
+            paths = export_all(self._root)
+            names = ", ".join(str(p.name) for p in paths)
+            self.call_from_thread(self._set_status, f"▸ ✓ exported: {names}")
+            self.call_from_thread(
+                lambda n=names: self.notify(f"Exported → {n}", severity="information")
+            )
+        except Exception as exc:
+            self.call_from_thread(self._set_status, f"▸ ✗ export failed: {exc}")
+            self.call_from_thread(
+                lambda e=exc: self.notify(f"Export failed: {e}", severity="error")
+            )
 
     # ------------------------------------------------------------------
     # Refresh
