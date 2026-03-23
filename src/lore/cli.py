@@ -223,14 +223,23 @@ def init(
         Path,
         typer.Argument(help="Directory to initialize (default: current directory)"),
     ] = Path("."),
+    extract: Annotated[
+        bool,
+        typer.Option("--extract", help="Also extract memories from recent git commits after init"),
+    ] = False,
+    last: Annotated[
+        int,
+        typer.Option("--last", "-n", help="Number of recent commits to scan when --extract is set"),
+    ] = 20,
 ) -> None:
     """Initialize a .lore store in the given directory."""
     from .store import init_store
     from .extract import _is_git_repo
     root = path.resolve()
     init_store(root)
+    is_git = _is_git_repo(root)
     # Warn if not inside a git repo — extract/hook won't work
-    if not _is_git_repo(root):
+    if not is_git:
         console.print(
             f"  [bold {_A}]▲[/bold {_A}]  [bold]{root}[/bold] is not a git repository.\n"
             f"  [dim]lore add/search/export work fine here, but [bold]lore extract[/bold] and "
@@ -244,12 +253,58 @@ def init(
         console.print(f"[dim]Added {entry} to .gitignore[/dim]")
     console.print(f"[green]Initialized lore store at[/green] {root / '.lore'}")
     console.print()
+
+    # Bootstrap all agent files so AI tools pick up lore directives from day one.
+    from .export import export_all
+    with console.status("Bootstrapping agent files…"):
+        written = export_all(root)
+    for p in written:
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  {p.relative_to(root)}")
+    console.print()
+
+    # Optionally extract memories from recent git history.
+    if extract and is_git:
+        from .extract import extract_from_git
+        from .store import add_memory
+        from .search import batch_index_memories
+        console.print(f"[dim]Scanning last {last} commit(s) for memory candidates…[/dim]")
+        try:
+            candidates = extract_from_git(root, n_commits=last)
+        except RuntimeError as e:
+            err_console.print(f"[red]{e}[/red]")
+            candidates = []
+        if candidates:
+            to_index: list[tuple[str, str]] = []
+            for c in candidates:
+                entry = add_memory(root, c["category"], c["content"], source=c["source"])
+                to_index.append((entry["id"], c["content"]))
+            if to_index:
+                with console.status("Indexing extracted memories…"):
+                    batch_index_memories(root, to_index)
+            console.print(
+                f"  [bold {_P}]✓[/bold {_P}]  Extracted and saved [bold]{len(to_index)}[/bold] "
+                f"memory(s) from git history."
+            )
+            # Re-export so chronicle reflects the newly extracted memories.
+            with console.status("Updating chronicle…"):
+                export_all(root)
+            console.print(f"  [bold {_P}]✓[/bold {_P}]  Chronicle updated.")
+            console.print()
+        else:
+            console.print(f"[dim]No memory candidates found in the last {last} commit(s).[/dim]")
+            console.print()
+    elif extract and not is_git:
+        console.print(
+            f"  [bold {_A}]▲[/bold {_A}]  [dim]--extract skipped: not a git repository.[/dim]"
+        )
+        console.print()
+
     console.print(
         Panel(
             f"[bold]The [bold {_P}].lore/[/bold {_P}] directory is your project memory.[/bold]\n"
             "Everything you [bold]add[/bold], [bold]extract[/bold], or [bold]import[/bold] lives here as plain YAML — "
             "readable, diffable, and fully yours.\n\n"
-            f"[dim]It is already excluded from git. Run [bold]lore add[/bold] to store your first memory.[/dim]",
+            f"[dim]Agent files have been bootstrapped. Run [bold]lore add[/bold] to store your first memory.[/dim]",
             border_style=_BD,
             padding=(0, 2),
             style=f"on {_BG}",
