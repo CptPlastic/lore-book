@@ -1,6 +1,8 @@
 """Configuration loading and resolution for mem."""
 from __future__ import annotations
 
+import random
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -23,8 +25,33 @@ LOCAL_AGENT_FILES = [
     "CONVENTIONS.md",
 ]
 
+_IDENTITY_ADJECTIVES = [
+    "ancient", "arcane", "astral", "ashen", "burning", "crystal", "dark", "dim",
+    "distant", "drifting", "eldritch", "emerald", "eternal", "fabled", "fallen",
+    "forgotten", "ghost", "gilded", "glowing", "hidden", "hollow", "iron", "jade",
+    "lost", "lunar", "misty", "obsidian", "phantom", "runic", "sacred", "shadowed",
+    "silent", "silver", "spectral", "starlit", "sunken", "twilight", "veiled",
+    "wandering", "whispering",
+]
+
+_IDENTITY_NOUNS = [
+    "anvil", "archive", "atlas", "beacon", "codex", "crown", "ember", "gate",
+    "glimmer", "grimoire", "loom", "meridian", "oracle", "prism", "reliquary",
+    "sanctum", "scroll", "seal", "sentinel", "sigil", "specter", "spire",
+    "tome", "vault", "veil", "watcher", "wayfarer",
+]
+
+
+def generate_identity() -> dict[str, str]:
+    """Generate a unique thematic name and UUID for this lore instance."""
+    name = f"{random.choice(_IDENTITY_ADJECTIVES)}-{random.choice(_IDENTITY_NOUNS)}"
+    uid = str(uuid.uuid4())
+    return {"name": name, "id": uid}
+
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "version": 1,
+    "identity": {"name": "", "id": ""},
     "project_description": "",
     "categories": ["decisions", "facts", "instructions", "preferences", "summaries"],
     "export_targets": {
