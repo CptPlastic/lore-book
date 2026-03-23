@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import memory_dir, load_config, save_config, DEFAULT_CONFIG
+from .config import memory_dir, load_config, save_config, DEFAULT_CONFIG, generate_identity
 
 # Per-file YAML parse cache: path -> (mtime, parsed_data)
 # Re-parses only when the file's mtime changes — transparent for both CLI and TUI.
@@ -39,7 +39,16 @@ def init_store(root: Path) -> None:
     (mem / "embeddings").mkdir(exist_ok=True)
     config_path = mem / "config.yaml"
     if not config_path.exists():
+        identity = generate_identity()
+        config["identity"] = identity
         save_config(root, config)
+    else:
+        # Ensure existing stores gain an identity if they were created before this feature.
+        existing_cfg = load_config(root)
+        ident = existing_cfg.get("identity", {})
+        if not ident.get("id"):
+            existing_cfg["identity"] = generate_identity()
+            save_config(root, existing_cfg)
 
 
 def _short_id() -> str:

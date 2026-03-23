@@ -235,8 +235,19 @@ def init(
     """Initialize a .lore store in the given directory."""
     from .store import init_store
     from .extract import _is_git_repo
+    from .config import load_config
     root = path.resolve()
     init_store(root)
+    cfg = load_config(root)
+    identity = cfg.get("identity", {})
+    ident_name = identity.get("name", "")
+    ident_id = identity.get("id", "")
+    if ident_name and ident_id:
+        console.print(
+            f"  [bold {_P}]✦[/bold {_P}]  Lore identity: "
+            f"[bold {_A}]{ident_name}[/bold {_A}]  [dim]({ident_id})[/dim]"
+        )
+        console.print()
     is_git = _is_git_repo(root)
     # Warn if not inside a git repo — extract/hook won't work
     if not is_git:
@@ -1769,6 +1780,14 @@ def doctor() -> None:
         mdir = memory_dir(root)
         cfg  = load_config(root)
         console.print(f"  {ok}  Store found at [bold]{mdir}[/bold]")
+        identity = cfg.get("identity", {})
+        ident_name = identity.get("name", "")
+        ident_id = identity.get("id", "")
+        if ident_name and ident_id:
+            console.print(
+                f"  {ok}  Identity       : "
+                f"[bold {_A}]{ident_name}[/bold {_A}]  [dim]({ident_id})[/dim]"
+            )
     else:
         console.print(f"  {err}  No .lore store found.")
         console.print(f"       Run [bold]lore init[/bold] first, then re-run [bold]lore doctor[/bold].")
