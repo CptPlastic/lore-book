@@ -1613,6 +1613,7 @@ def config_set(
       lore config model_endpoint https://artifactory.example.com/huggingface
       lore config model_ssl_verify false
       lore config embedding_model all-MiniLM-L6-v2
+      lore config scope local
     """
     from .config import load_config, save_config
     root = _require_root()
