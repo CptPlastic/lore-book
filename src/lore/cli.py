@@ -189,6 +189,13 @@ def _require_root() -> Path:
             "[red]No .lore directory found. Run `lore init` first.[/red]"
         )
         raise typer.Exit(code=1)
+    from .store import ensure_identity
+    repaired, identity = ensure_identity(root)
+    if repaired:
+        console.print(
+            f"\n  [bold {_A}]▲[/bold {_A}]  Identity was missing or corrupt — regenerated: "
+            f"[bold {_A}]{identity['name']}[/bold {_A}]  [dim]({identity['id']})[/dim]\n"
+        )
     return root
 
 

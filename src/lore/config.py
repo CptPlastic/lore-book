@@ -49,6 +49,15 @@ def generate_identity() -> dict[str, str]:
     return {"name": name, "id": uid}
 
 
+def is_valid_uuid(value: str) -> bool:
+    """Return True if *value* is a well-formed UUID string."""
+    try:
+        uuid.UUID(value)
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "version": 1,
     "identity": {"name": "", "id": ""},

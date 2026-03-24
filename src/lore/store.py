@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import memory_dir, load_config, save_config, DEFAULT_CONFIG, generate_identity
+from .config import memory_dir, load_config, save_config, DEFAULT_CONFIG, generate_identity, is_valid_uuid
 
 # Per-file YAML parse cache: path -> (mtime, parsed_data)
 # Re-parses only when the file's mtime changes — transparent for both CLI and TUI.
@@ -49,6 +49,33 @@ def init_store(root: Path) -> None:
         if not ident.get("id"):
             existing_cfg["identity"] = generate_identity()
             save_config(root, existing_cfg)
+
+
+def ensure_identity(root: Path) -> tuple[bool, dict]:
+    """Verify the store has a valid identity; repair silently if not.
+
+    Returns ``(was_repaired, identity_dict)``.
+    If the id is missing or not a valid UUID the id is regenerated.
+    If the name is also absent a fresh name is generated too.
+    The existing name is preserved when only the id is broken.
+    """
+    cfg = load_config(root)
+    identity = cfg.get("identity", {})
+    ident_id   = identity.get("id", "")
+    ident_name = identity.get("name", "")
+
+    if ident_id and is_valid_uuid(ident_id):
+        return False, identity
+
+    # Repair: keep name when still present, always issue a fresh id.
+    if ident_name:
+        new_identity: dict = {"name": ident_name, "id": str(uuid.uuid4())}
+    else:
+        new_identity = generate_identity()
+
+    cfg["identity"] = new_identity
+    save_config(root, cfg)
+    return True, new_identity
 
 
 def _short_id() -> str:
