@@ -1,0 +1,1069 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Lore · Demo &amp; Overview</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;700&display=swap">
+  <style>
+    /* ── Reset & tokens ──────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0e0b06;
+      --bg2:       #1a1208;
+      --parchment: #f5ead6;
+      --parchment-dark: #e8d5b0;
+      --ink:       #2a1f0e;
+      --ink-faded: #5c4a2a;
+      --gold:      #c8973a;
+      --gold-bright: #e8b84b;
+      --gold-dim:  #7a5c22;
+      --red:       #8b1a1a;
+      --green:     #39ff14;
+      --green-dim: #1a7a0a;
+      --amber:     #ffaa00;
+      --border:    rgba(200,151,58,0.35);
+      --glow:      rgba(200,151,58,0.18);
+      --r: 4px;
+    }
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--parchment);
+      font-family: "Crimson Text", Georgia, serif;
+      font-size: 18px;
+      line-height: 1.7;
+      overflow: hidden;
+    }
+    h1, h2, h3, .cinzel { font-family: "Cinzel", serif; }
+    code, pre, .mono { font-family: "JetBrains Mono", "Courier New", monospace; }
+
+    /* ── Canvas sparkles ─────────────────────────────────────── */
+    #sparkles {
+      position: fixed; inset: 0;
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ── Slide deck ──────────────────────────────────────────── */
+    #deck {
+      position: fixed; inset: 0; z-index: 1;
+      display: grid;
+      grid-template-rows: 1fr auto;
+    }
+
+    #slides {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      padding: 3rem 4rem;
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 0.42s ease, transform 0.42s ease;
+      pointer-events: none;
+    }
+    .slide.active {
+      opacity: 1; transform: translateY(0);
+      pointer-events: auto;
+    }
+    .slide.exit-up {
+      opacity: 0; transform: translateY(-28px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .slide-inner {
+      max-width: 860px;
+      width: 100%;
+    }
+
+    /* ── Nav bar ─────────────────────────────────────────────── */
+    #nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.75rem 2rem;
+      border-top: 1px solid var(--border);
+      background: rgba(14,11,6,0.92);
+      backdrop-filter: blur(6px);
+      gap: 1rem;
+    }
+
+    #progress-bar {
+      position: absolute; bottom: 60px; left: 0;
+      height: 2px; background: var(--gold);
+      transition: width 0.35s ease;
+    }
+
+    .nav-btn {
+      background: none; border: 1px solid var(--border);
+      color: var(--gold); font-family: "Cinzel", serif;
+      font-size: 0.75rem; letter-spacing: 0.1em;
+      padding: 0.35rem 1rem; border-radius: var(--r);
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+    .nav-btn:hover { background: var(--glow); border-color: var(--gold-bright); color: var(--gold-bright); }
+    .nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+    #slide-counter {
+      font-family: "Cinzel", serif;
+      font-size: 0.7rem;
+      color: var(--gold-dim);
+      letter-spacing: 0.15em;
+      white-space: nowrap;
+    }
+
+    #notes-toggle {
+      background: none; border: none;
+      color: var(--gold-dim); font-size: 0.7rem;
+      letter-spacing: 0.1em; cursor: pointer;
+      font-family: "Cinzel", serif;
+      padding: 0.25rem 0.5rem;
+      transition: color 0.2s;
+    }
+    #notes-toggle:hover { color: var(--gold); }
+
+    #notes-panel {
+      display: none;
+      position: fixed; bottom: 65px; left: 0; right: 0;
+      background: rgba(30,22,8,0.97);
+      border-top: 1px solid var(--border);
+      padding: 1rem 2rem;
+      font-size: 0.85rem;
+      color: var(--parchment-dark);
+      z-index: 99;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    #notes-panel.open { display: block; }
+    #notes-panel p { margin: 0; line-height: 1.6; }
+
+    /* Keyboard hint */
+    #kbd-hint {
+      font-size: 0.65rem; color: var(--gold-dim);
+      letter-spacing: 0.08em;
+    }
+
+    /* ── Slide typography ────────────────────────────────────── */
+    .slide-title {
+      font-size: clamp(1.8rem, 5vw, 3rem);
+      font-weight: 900;
+      color: var(--gold-bright);
+      text-shadow: 0 0 40px rgba(232,184,75,0.35);
+      letter-spacing: 0.06em;
+      line-height: 1.15;
+      margin-bottom: 0.5rem;
+    }
+    .slide-subtitle {
+      font-size: clamp(1rem, 2.5vw, 1.35rem);
+      color: var(--gold);
+      font-family: "Cinzel", serif;
+      letter-spacing: 0.12em;
+      margin-bottom: 1.5rem;
+    }
+    .slide-body {
+      font-size: clamp(1rem, 2vw, 1.2rem);
+      color: var(--parchment);
+      line-height: 1.8;
+    }
+    .rune { color: var(--gold); margin-right: 0.4rem; }
+
+    /* ── Parchment card ──────────────────────────────────────── */
+    .card {
+      background: var(--parchment);
+      color: var(--ink);
+      border: 1px solid var(--gold);
+      border-radius: var(--r);
+      padding: 1.75rem 2.25rem;
+      position: relative;
+      box-shadow: 0 0 0 4px rgba(200,151,58,0.12),
+                  0 8px 40px rgba(0,0,0,0.6),
+                  inset 0 0 60px rgba(200,151,58,0.05);
+      width: 100%;
+    }
+    .card::before {
+      content: "";
+      position: absolute; inset: 5px;
+      border: 1px solid rgba(200,151,58,0.22);
+      pointer-events: none;
+    }
+    .card h3 {
+      font-size: 1.05rem; font-weight: 600;
+      color: var(--red); letter-spacing: 0.08em;
+      text-transform: uppercase; margin-bottom: 0.5rem;
+    }
+    .card p, .card li { font-size: 1rem; line-height: 1.7; color: var(--ink-faded); }
+    .card ul { padding-left: 1.25rem; }
+    .card li { margin-bottom: 0.25rem; }
+
+    /* ── Terminal block ──────────────────────────────────────── */
+    .terminal {
+      background: #0a0f0a;
+      border: 1px solid var(--green-dim);
+      border-radius: var(--r);
+      padding: 1.25rem 1.5rem;
+      font-family: "JetBrains Mono", monospace;
+      font-size: clamp(0.72rem, 1.6vw, 0.9rem);
+      line-height: 1.7;
+      color: var(--green);
+      box-shadow: 0 0 24px rgba(57,255,20,0.06), inset 0 0 40px rgba(0,0,0,0.4);
+      position: relative;
+      overflow: hidden;
+      min-height: 3rem;
+    }
+    .terminal::before {
+      content: "● ● ●";
+      display: block;
+      color: #444;
+      font-size: 0.65rem;
+      letter-spacing: 0.35em;
+      margin-bottom: 0.6rem;
+    }
+    .terminal .prompt { color: var(--amber); }
+    .terminal .comment { color: #555; font-style: italic; }
+    .terminal .output  { color: #88cc88; }
+    .terminal .dim     { color: #4a7a4a; }
+    .terminal .gold    { color: var(--gold); }
+    .terminal .bold    { font-weight: 700; }
+    .terminal .cursor {
+      display: inline-block; width: 8px; height: 1em;
+      background: var(--green); vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* Typewriter animation targets */
+    .typewriter { display: inline; }
+
+    /* ── Grid layouts ────────────────────────────────────────── */
+    .two-col {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 1.25rem; width: 100%;
+    }
+    .three-col {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 1rem; width: 100%;
+    }
+    @media (max-width: 680px) {
+      .two-col, .three-col { grid-template-columns: 1fr; }
+      .slide { padding: 2rem 1.5rem; }
+    }
+
+    /* ── Hero slide specific ─────────────────────────────────── */
+    .hero-sigil {
+      font-size: 5rem; line-height: 1;
+      filter: drop-shadow(0 0 24px var(--gold-bright));
+      margin-bottom: 1rem;
+    }
+    .hero-badges {
+      display: flex; flex-wrap: wrap; gap: 0.5rem;
+      justify-content: center; margin-top: 1.5rem;
+    }
+    .badge {
+      border: 1px solid var(--border);
+      color: var(--gold-dim); font-family: "Cinzel", serif;
+      font-size: 0.65rem; letter-spacing: 0.15em;
+      padding: 0.25rem 0.75rem; border-radius: 2px;
+    }
+
+    /* ── Flow diagram ────────────────────────────────────────── */
+    .flow {
+      display: flex; flex-direction: column;
+      align-items: center; gap: 0;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.85rem; color: var(--green);
+    }
+    .flow-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.3rem 0;
+    }
+    .flow-box {
+      background: rgba(57,255,20,0.06);
+      border: 1px solid var(--green-dim);
+      border-radius: var(--r);
+      padding: 0.3rem 1rem;
+      color: var(--green);
+      text-align: center;
+    }
+    .flow-box.dim { opacity: 0.55; }
+    .flow-arrow { color: var(--gold-dim); font-size: 1.1rem; }
+    .flow-label { color: var(--amber); font-size: 0.72rem; }
+
+    /* ── Tool grid ───────────────────────────────────────────── */
+    .tool-grid {
+      display: flex; flex-wrap: wrap; gap: 0.6rem;
+      width: 100%;
+    }
+    .tool-pill {
+      border: 1px solid var(--border);
+      color: var(--parchment-dark);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.75rem;
+      padding: 0.3rem 0.8rem; border-radius: 2px;
+      background: rgba(200,151,58,0.05);
+    }
+    .tool-pill.new { border-color: var(--green-dim); color: var(--green); }
+
+    /* ── Scope diagram ───────────────────────────────────────── */
+    .scope-diagram {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.82rem;
+      background: #0a0f0a;
+      border: 1px solid var(--green-dim);
+      border-radius: var(--r);
+      padding: 1.25rem 1.5rem;
+      color: var(--parchment-dark);
+      width: 100%;
+    }
+    .scope-diagram .dir { color: var(--amber); font-weight: 700; }
+    .scope-diagram .cmd { color: var(--green); }
+    .scope-diagram .ok  { color: #88cc88; }
+    .scope-diagram .no  { color: #cc4444; }
+    .scope-diagram .note{ color: #666; font-style: italic; }
+
+    /* ── Section number chip ─────────────────────────────────── */
+    .section-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 2.2rem; height: 2.2rem;
+      border: 1px solid var(--gold-dim);
+      border-radius: 50%;
+      font-family: "Cinzel", serif;
+      font-size: 0.85rem; color: var(--gold-dim);
+      margin-bottom: 1rem;
+      flex-shrink: 0;
+    }
+
+    /* ── Divider ─────────────────────────────────────────────── */
+    .gold-rule {
+      width: 100%; border: none;
+      border-top: 1px solid var(--border);
+      margin: 1rem 0;
+    }
+
+    /* ── Highlight box ───────────────────────────────────────── */
+    .callout {
+      border-left: 3px solid var(--gold);
+      padding: 0.75rem 1rem;
+      background: rgba(200,151,58,0.07);
+      border-radius: 0 var(--r) var(--r) 0;
+      font-size: 0.95rem;
+      color: var(--parchment-dark);
+      margin-top: 1rem;
+    }
+    .callout strong { color: var(--gold-bright); }
+
+    /* ── Animated step list ──────────────────────────────────── */
+    .step-list { list-style: none; padding: 0; width: 100%; }
+    .step-list li {
+      display: flex; gap: 0.75rem; align-items: flex-start;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid rgba(200,151,58,0.12);
+    }
+    .step-list li:last-child { border-bottom: none; }
+    .step-num {
+      font-family: "Cinzel", serif; font-size: 0.75rem;
+      color: var(--gold-dim); letter-spacing: 0.1em;
+      min-width: 2rem; padding-top: 0.1rem;
+    }
+    .step-content strong { color: var(--parchment); }
+    .step-content span  { color: var(--ink-faded); }
+    .step-content { color: var(--parchment-dark); font-size: 0.95rem; }
+
+    /* hide scrollbar in notes */
+    #notes-panel::-webkit-scrollbar { width: 4px; }
+    #notes-panel::-webkit-scrollbar-thumb { background: var(--border); }
+
+    /* ── Fullscreen hint ─────────────────────────────────────── */
+    #fs-btn {
+      background: none; border: 1px solid var(--border);
+      color: var(--gold-dim); font-size: 0.7rem;
+      letter-spacing: 0.1em; cursor: pointer;
+      font-family: "Cinzel", serif; padding: 0.25rem 0.6rem;
+      border-radius: var(--r); transition: color 0.2s, border-color 0.2s;
+    }
+    #fs-btn:hover { color: var(--gold); border-color: var(--gold); }
+  </style>
+</head>
+<body>
+
+<canvas id="sparkles" aria-hidden="true"></canvas>
+
+<div id="deck">
+  <div id="slides">
+    <div id="progress-bar"></div>
+
+    <!-- ─────────────────────────────── SLIDE 0: Hero ─── -->
+    <div class="slide active" id="s0" data-notes="Welcome. This is lore — a local AI memory system for software projects. It solves the problem of AI coding tools being stateless: they don't remember your decisions, constraints, or context between sessions. The tagline says it all: record once, every AI inherits it.">
+      <div class="slide-inner" style="text-align:center">
+        <div class="hero-sigil">📜</div>
+        <h1 class="slide-title">L · O · R · E</h1>
+        <p class="slide-subtitle">The Spellbook for Your Codebase</p>
+        <p class="slide-body" style="font-style:italic; max-width:540px; margin: 0 auto; color: var(--parchment-dark);">
+          Chronicle decisions, context, and lessons your AI companions can actually read.
+        </p>
+        <div class="hero-badges">
+          <span class="badge">LOCAL YAML STORE</span>
+          <span class="badge">NO CLOUD SYNC</span>
+          <span class="badge">NO API KEYS</span>
+          <span class="badge">TOOL-AGNOSTIC</span>
+          <span class="badge">PLAIN FILES · DIFFABLE</span>
+        </div>
+        <p style="margin-top:2.5rem; font-size:0.8rem; color:var(--gold-dim); font-family:'Cinzel',serif; letter-spacing:0.15em;">
+          ✦ &nbsp; PRESS &nbsp;→ &nbsp; OR &nbsp; SPACEBAR &nbsp; TO ADVANCE &nbsp; ✦
+        </p>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 1: The Problem ─── -->
+    <div class="slide" id="s1" data-notes="This is the core problem. AI coding tools are stateless — every new chat session is a blank slate. You re-explain context constantly. Lore captures that context once, in .lore/ next to your code, and auto-exports it to the files each tool reads at startup.">
+      <div class="slide-inner">
+        <div class="section-num">1</div>
+        <h2 class="slide-title" style="font-size:clamp(1.5rem,4vw,2.4rem)">The Problem</h2>
+        <p class="slide-subtitle" style="font-size:1rem">AI tools are stateless — context evaporates</p>
+        <div class="two-col" style="margin-top:1.5rem">
+          <div class="card">
+            <h3>Without Lore</h3>
+            <ul>
+              <li>Re-explain architecture every session</li>
+              <li>AI suggests choices you already ruled out</li>
+              <li>Security rules repeated in every prompt</li>
+              <li>New team members start from zero context</li>
+              <li>Decisions exist only in someone's head</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>With Lore</h3>
+            <ul>
+              <li>Decisions captured once as plain YAML</li>
+              <li>AI reads your chronicle at session start</li>
+              <li>Security preamble in every export</li>
+              <li>New devs inherit full project memory</li>
+              <li>Context travels with the code in git</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:1.25rem">
+          <strong>Rule of thumb:</strong> If you've explained something to an AI twice, it belongs in lore.
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 2: How it works ─── -->
+    <div class="slide" id="s2" data-notes="The data flow is simple. Knowledge enters through 'lore add' or 'lore relic capture'. It lives in .lore/ as plain YAML files you can read, diff, and commit. 'lore export' publishes it to the instruction files each AI tool reads automatically. One source of truth feeds all the tools.">
+      <div class="slide-inner">
+        <div class="section-num">2</div>
+        <h2 class="slide-title" style="font-size:clamp(1.4rem,3.5vw,2.2rem)">How the Magic Flows</h2>
+        <p class="slide-subtitle" style="font-size:0.95rem">One source of truth → every AI tool</p>
+        <div style="margin-top:1.5rem; display:flex; gap:1.5rem; flex-wrap:wrap">
+          <div class="flow" style="flex:1; min-width:260px">
+            <div class="flow-row">
+              <div class="flow-box"><span class="bold">lore add</span> / <span class="bold">lore relic</span></div>
+            </div>
+            <div class="flow-row"><span class="flow-arrow">↓</span><span class="flow-label">captured as YAML</span></div>
+            <div class="flow-row">
+              <div class="flow-box"><span class="bold">.lore/</span> &nbsp;plain files · git-tracked</div>
+            </div>
+            <div class="flow-row"><span class="flow-arrow">↓</span><span class="flow-label">lore export</span></div>
+            <div class="flow-row">
+              <div class="flow-box" style="border-color:var(--gold); color:var(--gold-bright)"><span class="bold">CHRONICLE.md</span> — full memory</div>
+            </div>
+            <div class="flow-row"><span class="flow-arrow">↓</span><span class="flow-label">referenced by lean adapters</span></div>
+            <div class="flow-row" style="flex-wrap:wrap; justify-content:center; gap:0.35rem">
+              <div class="flow-box dim" style="font-size:0.72rem; padding:0.2rem 0.5rem">Copilot</div>
+              <div class="flow-box dim" style="font-size:0.72rem; padding:0.2rem 0.5rem">Claude</div>
+              <div class="flow-box dim" style="font-size:0.72rem; padding:0.2rem 0.5rem">Cursor</div>
+              <div class="flow-box dim" style="font-size:0.72rem; padding:0.2rem 0.5rem">AGENTS</div>
+              <div class="flow-box dim" style="font-size:0.72rem; padding:0.2rem 0.5rem">Gemini</div>
+              <div class="flow-box dim" style="font-size:0.72rem; padding:0.2rem 0.5rem">Cline</div>
+            </div>
+          </div>
+          <div style="flex:1; min-width:240px">
+            <div class="card" style="height:100%">
+              <h3>Key principle</h3>
+              <p style="margin-bottom:0.75rem"><strong>Two-layer architecture:</strong></p>
+              <ul>
+                <li><code>CHRONICLE.md</code> — one full source of truth, committable</li>
+                <li>Lean adapter files — tiny, tool-specific, reference the chronicle</li>
+              </ul>
+              <hr class="gold-rule">
+              <p>Token overhead per session stays <strong>minimal</strong>. Only the chronicle grows; adapters stay small.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 3: Install ─── -->
+    <div class="slide" id="s3" data-notes="Installation is a single pip command. Python 3.10+ is the only requirement. Lore ships with TF-IDF search out of the box. Dense vector search via sentence-transformers is optional — the setup wizard handles it. There's also a local dev install path.">
+      <div class="slide-inner">
+        <div class="section-num">3</div>
+        <h2 class="slide-title" style="font-size:clamp(1.4rem,3.5vw,2.2rem)">Install</h2>
+        <p class="slide-subtitle" style="font-size:0.95rem">One command · Python 3.10+</p>
+        <div style="margin-top:1.5rem; display:flex; flex-direction:column; gap:1rem">
+          <div class="terminal" id="term-install">
+            <span class="comment"># stable release from PyPI</span><br>
+            <span class="prompt">$ </span><span id="tw-install" class="typewriter"></span><span class="cursor" id="cur-install"></span><br><br>
+            <span class="comment"># or local dev install</span><br>
+            <span class="prompt">$ </span><span id="tw-devinst" class="typewriter"></span><span class="cursor" id="cur-devinst" style="display:none"></span>
+          </div>
+          <div class="two-col">
+            <div class="card">
+              <h3>Batteries included</h3>
+              <ul>
+                <li>TF-IDF search — works immediately</li>
+                <li>All AI adapter file exports</li>
+                <li>Git hook integration</li>
+                <li>Trust scoring from git signals</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Optional extras</h3>
+              <ul>
+                <li>Dense vector search (sentence-transformers)</li>
+                <li>Run the guided wizard:</li>
+              </ul>
+              <div class="terminal" style="margin-top:0.5rem; padding:0.5rem 0.75rem; font-size:0.78rem">
+                <span class="prompt">$ </span><span style="color:var(--green)">lore setup semantic</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 4: Onboard ─── -->
+    <div class="slide" id="s4" data-notes="lore onboard is the guided entry point. It walks through four chapters: forging the store (.lore/ directory), inscribing the security law, recording a first memory, and publishing the chronicle. It auto-detects the project description from pyproject.toml or README. Great for new team members too.">
+      <div class="slide-inner">
+        <div class="section-num">4</div>
+        <h2 class="slide-title" style="font-size:clamp(1.4rem,3.5vw,2.2rem)">First Run — Onboard</h2>
+        <p class="slide-subtitle" style="font-size:0.95rem">A guided ritual for new projects</p>
+        <div style="margin-top:1.25rem; display:flex; gap:1.25rem; flex-wrap:wrap">
+          <div class="terminal" style="flex:1; min-width:280px">
+            <span class="prompt">$ </span><span style="color:var(--green)">lore onboard</span><br><br>
+            <span class="gold bold">📜  L · O · R · E</span><br>
+            <span class="dim">   An Onboarding Chronicle</span><br><br>
+            <span class="comment">  I.   Forge the Store</span><br>
+            <span class="comment">  II.  Inscribe a Law  (security)</span><br>
+            <span class="comment">  III. Record a Memory</span><br>
+            <span class="comment">  IV.  Publish the Chronicle</span><br><br>
+            <span class="output">  ✓  Sanctum forged at ./lore/</span><br>
+            <span class="output">  ✓  Security covenant inscribed</span><br>
+            <span class="output">  ✓  Memory sealed into decisions</span><br>
+            <span class="output">  ✓  Chronicle published</span>
+          </div>
+          <div style="flex:0 0 auto; min-width:220px">
+            <ul class="step-list">
+              <li>
+                <span class="step-num">I</span>
+                <div class="step-content"><strong>Forge the Store</strong> <br><span>Creates <code>.lore/</code>, adds it to .gitignore</span></div>
+              </li>
+              <li>
+                <span class="step-num">II</span>
+                <div class="step-content"><strong>Inscribe a Law</strong> <br><span>Security preamble, OWASP rules, custom edicts</span></div>
+              </li>
+              <li>
+                <span class="step-num">III</span>
+                <div class="step-content"><strong>Record a Memory</strong> <br><span>Choose category, write content, optional tags</span></div>
+              </li>
+              <li>
+                <span class="step-num">IV</span>
+                <div class="step-content"><strong>Publish the Chronicle</strong> <br><span>Writes CHRONICLE.md + all adapter files</span></div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 5: Adding memories ─── -->
+    <div class="slide" id="s5" data-notes="lore add is the primary capture command. You can use it interactively — it walks you through category, content, and tags. Or pass everything inline for scripting and CI. Categories are just folder names under .lore/. Default tomes: decisions, facts, preferences, summaries. You can add your own in config.">
+      <div class="slide-inner">
+        <div class="section-num">5</div>
+        <h2 class="slide-title" style="font-size:clamp(1.4rem,3.5vw,2.2rem)">Spells — Adding Memories</h2>
+        <p class="slide-subtitle" style="font-size:0.95rem">Capture once · retrieve semantically</p>
+        <div style="margin-top:1.25rem; display:flex; gap:1.25rem; flex-wrap:wrap">
+          <div class="terminal" style="flex:1">
+            <span class="comment"># interactive walkthrough</span><br>
+            <span class="prompt">$ </span><span class="bold">lore add</span><br><br>
+            <span class="comment"># or inline — scriptable and CI-friendly</span><br>
+            <span class="prompt">$ </span><span class="bold">lore add decisions</span> <span class="output">"Use PostgreSQL — need JSONB and row-level locking"</span><br>
+            <span class="prompt">$ </span><span class="bold">lore add facts</span> <span class="output">"Auth service is the sole issuer of JWTs — never bypass it"</span><br>
+            <span class="prompt">$ </span><span class="bold">lore add preferences</span> <span class="output">"Always use type hints"</span> <span class="dim">--tags style,python</span><br>
+            <span class="prompt">$ </span><span class="bold">lore add summaries</span> <span class="output">"v2.4 dropped the v1 API endpoints entirely"</span><br><br>
+            <span class="comment"># list and manage</span><br>
+            <span class="prompt">$ </span><span class="bold">lore list</span><br>
+            <span class="prompt">$ </span><span class="bold">lore list decisions</span><br>
+            <span class="prompt">$ </span><span class="bold">lore remove</span> <span class="dim">a1b2c3d4</span>
+          </div>
+          <div style="flex:0 0 200px">
+            <div class="card">
+              <h3>Default Tomes</h3>
+              <ul>
+                <li><strong>decisions</strong> — why choices were made</li>
+                <li><strong>facts</strong> — constraints &amp; rules</li>
+                <li><strong>preferences</strong> — style &amp; conventions</li>
+                <li><strong>summaries</strong> — change history</li>
+              </ul>
+              <hr class="gold-rule">
+              <p style="font-size:0.85rem">Custom tomes: add to <code>categories</code> in <code>.lore/config.yaml</code></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 6: Search ─── -->
+    <div class="slide" id="s6" data-notes="lore search uses semantic similarity — it finds conceptually related spells even if you don't use exact keywords. Default mode is TF-IDF which works out of the box. Install sentence-transformers and run 'lore setup semantic' for dense vector search. Results show a similarity score, category, and a preview.">
+      <div class="slide-inner">
+        <div class="section-num">6</div>
+        <h2 class="slide-title" style="font-size:clamp(1.4rem,3.5vw,2.2rem)">Semantic Search</h2>
+        <p class="slide-subtitle" style="font-size:0.95rem">Find what you know — conceptually</p>
+        <div style="margin-top:1.25rem">
+          <div class="terminal">
+            <span class="prompt">$ </span><span class="bold">lore search</span> <span class="output">"why did we choose postgres"</span><br><br>
+            <span class="gold">  ── 3 results ──────────────────────────────────────────────</span><br><br>
+            <span class="output">  [0.94]  decisions · a1b2c3d4</span><br>
+            <span class="dim">          Use PostgreSQL — need JSONB and row-level locking</span><br><br>
+            <span class="output">  [0.71]  decisions · e5f6a7b8</span><br>
+            <span class="dim">          Evaluated SQLite and MySQL; rejected due to concurrency limits</span><br><br>
+            <span class="output">  [0.58]  facts · c9d0e1f2</span><br>
+            <span class="dim">          Production DB is Aurora PostgreSQL 15 — never run raw DDL in flights</span>
+          </div>
+          <div class="two-col" style="margin-top:1rem">
+            <div class="callout" style="margin-top:0">
+              <strong>TF-IDF</strong> — works out of the box with no extras.
+            </div>
+            <div class="callout" style="margin-top:0">
+              <strong>Dense vectors</strong> — run <code>lore setup semantic</code> to enable sentence-transformers.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 7: Relics ─── -->
+    <div class="slide" id="s7" data-notes="Relics are for raw intake — when you're moving fast and don't have time to curate. Capture a session dump, git diff, Slack thread, or doc export as a relic. Later, use 'lore relic distill' to walk through the relic and pull out the specific pieces that should become spells. Each distilled spell links back to its source relic.">
+      <div class="slide-inner">
+        <div class="section-num">7</div>
+        <h2 class="slide-title" style="font-size:clamp(1.4rem,3.5vw,2.2rem)">Relics — Capture Now, Curate Later</h2>
+        <p class="slide-subtitle" style="font-size:0.95rem">Raw artifacts → distilled spells</p>
+        <div style="margin-top:1.25rem; display:flex; gap:1.25rem; flex-wrap:wrap">
+          <div class="terminal" style="flex:1; min-width:280px; font-size:0.78rem">
+            <span class="comment"># capture — many input sources</span><br>
+            <span class="prompt">$ </span><span class="bold">lore relic capture</span> <span class="dim">--git-diff --title "Pre-deploy changes"</span><br>
+            <span class="prompt">$ </span><span class="bold">lore relic capture</span> <span class="dim">--file session-notes.md</span><br>
+            <span class="prompt">$ </span><span class="bold">lore relic capture</span> <span class="dim">--clipboard --title "Auth Slack thread"</span><br>
+            <span class="prompt">$ </span><span class="bold">lore relic capture</span> <span class="dim">--git-log 5 --title "Sprint wrap-up"</span><br>
+            <span class="output">  ✓  Relic a3f1b2c4 stored (2,847 chars)</span><br><br>
+            <span class="comment"># later — distill into spells</span><br>
+            <span class="prompt">$ </span><span class="bold">lore relic distill</span> <span class="dim">a3f1b2c4</span><br><br>
+            <span class="gold">  ─── Spell #1 ──────────────────────────────</span><br>
+            <span class="dim">  ✦ Inscription: </span><span class="output">We chose CQRS to separate read/write models</span><br>
+            <span class="dim">  ✦ Tome [decisions]: </span><br>
+            <span class="output">  ✓  Spell b9c0d1e2 sealed into decisions</span>
+          </div>
+          <div style="flex:0 0 200px">
+            <div class="card">
+              <h3>When to use relics</h3>
+              <ul>
+                <li>Mid-sprint, no time to curate</li>
+                <li>Copying from Confluence/Slack</li>
+                <li>Post-incident notes</li>
+                <li>Architecture review transcripts</li>
+                <li>Long git diffs to review later</li>
+              </ul>
+              <hr class="gold-rule">
+              <p style="font-size:0.82rem">Each spell links back to its source relic for full provenance.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 8: Export ─── -->
+    <div class="slide" id="s8" data-notes="lore export writes all enabled adapter files. CHRONICLE.md is the full source of truth — teams commit this. Lean adapter files are gitignored by default: they're personal tool wrappers that reference the same chronicle. The /lore trigger in Copilot Chat invokes the prompt adapter, which loads CHRONICLE.md into context.">
+      <div class="slide-inner">
+        <div class="section-num">8</div>
+        <h2 class="slide-title" style="font-size:clamp(1.4rem,3.5vw,2.2rem)">Export — Publish the Chronicle</h2>
+        <p class="slide-subtitle" style="font-size:0.95rem">One command · all AI tools in sync</p>
+        <div style="margin-top:1.25rem; display:flex; gap:1.25rem; flex-wrap:wrap">
+          <div class="terminal" style="flex:1; min-width:280px">
+            <span class="prompt">$ </span><span class="bold">lore export</span><br><br>
+            <span class="output">  ✓  CHRONICLE.md</span><br>
+            <span class="output">  ✓  .github/copilot-instructions.md</span><br>
+            <span class="output">  ✓  AGENTS.md</span><br>
+            <span class="output">  ✓  CLAUDE.md</span><br>
+            <span class="output">  ✓  .cursor/rules/memory.md</span><br>
+            <span class="output">  ✓  .github/prompts/lore.prompt.md</span><br>
+            <span class="output">  ✓  .windsurfrules</span><br>
+            <span class="output">  ✓  GEMINI.md</span><br>
+            <span class="output">  ✓  .clinerules</span><br>
+            <span class="output">  ✓  CONVENTIONS.md</span><br><br>
+            <span class="dim">  10 files written atomically</span>
+          </div>
+          <div style="flex:0 0 220px; display:flex; flex-direction:column; gap:0.75rem">
+            <div class="card" style="flex:1">
+              <h3>Adapter files</h3>
+              <div class="tool-grid">
+                <span class="tool-pill">Copilot</span>
+                <span class="tool-pill">Claude</span>
+                <span class="tool-pill">Cursor</span>
+                <span class="tool-pill">Codex</span>
+                <span class="tool-pill">Windsurf</span>
+                <span class="tool-pill">Gemini</span>
+                <span class="tool-pill">Cline</span>
+                <span class="tool-pill">Aider</span>
+              </div>
+              <hr class="gold-rule">
+              <p style="font-size:0.82rem"><code>CHRONICLE.md</code> is committable. Adapter files are gitignored by default.</p>
+            </div>
+          </div>
+        </div>
+        <div class="callout">
+          <strong>/lore trigger:</strong> In GitHub Copilot Chat, type <code>/lore</code> to load your full chronicle into context on demand.
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 9: Trust ─── -->
+    <div class="slide" id="s9" data-notes="Trust scoring auto-ranks memories by git signals: author reputation, how often the file has been touched, recency, tags like 'verified' or 'deprecated'. You can set a minimum score for chronicle export so only well-validated memories reach AI tools. The trust explain command shows exactly how a score was calculated.">
+      <div class="slide-inner">
+        <div class="section-num">9</div>
+        <h2 class="slide-title" style="font-size:clamp(1.4rem,3.5vw,2.2rem)">Trust Scoring</h2>
+        <p class="slide-subtitle" style="font-size:0.95rem">Not all memories are equal</p>
+        <div style="margin-top:1.25rem; display:flex; gap:1.25rem; flex-wrap:wrap">
+          <div class="terminal" style="flex:1; min-width:280px">
+            <span class="comment"># score all memories from git metadata</span><br>
+            <span class="prompt">$ </span><span class="bold">lore trust refresh</span><br><br>
+            <span class="output">  ✓  a1b2c3d4  decisions  score=87  (author: trusted, 3 touches)</span><br>
+            <span class="output">  ✓  e5f6a7b8  facts      score=72  (recency boost)</span><br>
+            <span class="dim">  ~  c9d0e1f2  facts      score=31  (tag: needs-review)</span><br><br>
+            <span class="comment"># explain one score</span><br>
+            <span class="prompt">$ </span><span class="bold">lore trust explain</span> <span class="dim">a1b2c3d4</span><br><br>
+            <span class="output">  author_weight   40  (trusted author)</span><br>
+            <span class="output">  activity_bonus  25  (committed 3×)</span><br>
+            <span class="output">  recency_bonus   22  (last touched 4d ago)</span><br>
+            <span class="dim">  total           87</span>
+          </div>
+          <div style="flex:0 0 210px">
+            <div class="card">
+              <h3>Tune trust thresholds</h3>
+              <div class="terminal" style="padding:0.6rem 0.75rem; font-size:0.72rem; margin-bottom:0.75rem">
+                <span class="comment"># .lore/config.yaml</span><br>
+                <span class="gold">trust:</span><br>
+                <span class="dim">  default_score: 50</span><br>
+                <span class="dim">  chronicle_min_score: 60</span><br>
+                <span class="dim">  trusted_authors:</span><br>
+                <span class="dim">    - "Alice"</span>
+              </div>
+              <p style="font-size:0.82rem">Only entries at or above <code>chronicle_min_score</code> appear in exports.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 10: Scope ─── -->
+    <div class="slide" id="s10" data-notes="New in this release: the scope config key. By default, lore walks up parent directories looking for a store — so /folderA/.lore would be inherited by /folderA/folderB. Setting scope: local prevents that. LORE_ROOT env var gives an explicit root pin for scripts and CI pipelines.">
+      <div class="slide-inner">
+        <div class="section-num">10</div>
+        <h2 class="slide-title" style="font-size:clamp(1.4rem,3.5vw,2.2rem)">Store Scope &amp; Isolation</h2>
+        <p class="slide-subtitle" style="font-size:0.95rem">Control which directory inherits which store</p>
+        <div style="margin-top:1.25rem">
+          <div class="scope-diagram">
+            <span class="dir">/workspace/</span><br>
+            <span class="dir">├── projectA/</span>   <span class="note"># has .lore/</span><br>
+            <span class="dir">│   ├── .lore/</span>   <span class="note"># scope: auto (default)</span><br>
+            <span class="dir">│   └── sub/</span>     <span class="ok">✓ inherits projectA's store</span><br>
+            <span class="dir">├── projectB/</span>   <span class="note"># has .lore/ with scope: local</span><br>
+            <span class="dir">│   ├── .lore/</span>   <span class="note"># scope: local</span><br>
+            <span class="dir">│   └── sub/</span>     <span class="no">✗ no store visible — lore exits cleanly</span><br>
+          </div>
+          <div class="two-col" style="margin-top:1rem">
+            <div class="terminal" style="font-size:0.8rem">
+              <span class="comment"># pin a store to its own directory only</span><br>
+              <span class="prompt">$ </span><span class="bold">lore config scope local</span><br><br>
+              <span class="comment"># explicit root for scripts / CI</span><br>
+              <span class="prompt">$ </span><span class="bold">LORE_ROOT</span><span class="dim">=/projectA</span> <span class="bold">lore search</span> <span class="dim">"…"</span>
+            </div>
+            <div class="card">
+              <h3>Scope values</h3>
+              <ul>
+                <li><code>auto</code> — walk up to parent store (default, backward-compatible)</li>
+                <li><code>local</code> — store is private to its own directory</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 11: Live demo prompt ─── -->
+    <div class="slide" id="s11" data-notes="This is the live demo slide. Walk through the commands in order. Start with 'lore doctor' to show the store state. Then add a memory specific to what the audience cares about. Run a search. Show the exported CHRONICLE.md. If time allows, capture a relic from a git diff and distill one spell.">
+      <div class="slide-inner">
+        <div class="section-num">◈</div>
+        <h2 class="slide-title" style="font-size:clamp(1.4rem,3.5vw,2.2rem)">Live Demo</h2>
+        <p class="slide-subtitle" style="font-size:0.95rem">Commands to walk through</p>
+        <div style="margin-top:1.25rem; display:grid; grid-template-columns:1fr 1fr; gap:1rem">
+          <div class="terminal" style="font-size:0.78rem">
+            <span class="comment"># ①  health check</span><br>
+            <span class="prompt">$ </span><span class="bold">lore doctor</span><br><br>
+            <span class="comment"># ②  add a memory live</span><br>
+            <span class="prompt">$ </span><span class="bold">lore add decisions</span> <span class="output">"…"</span><br><br>
+            <span class="comment"># ③  search immediately</span><br>
+            <span class="prompt">$ </span><span class="bold">lore search</span> <span class="output">"…"</span><br><br>
+            <span class="comment"># ④  export &amp; inspect</span><br>
+            <span class="prompt">$ </span><span class="bold">lore export</span><br>
+            <span class="prompt">$ </span><span class="bold">cat CHRONICLE.md</span><br><br>
+            <span class="comment"># ⑤  capture a relic</span><br>
+            <span class="prompt">$ </span><span class="bold">lore relic capture --git-diff</span><br>
+            <span class="prompt">$ </span><span class="bold">lore relic distill</span> <span class="dim">&lt;id&gt;</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:0.75rem">
+            <div class="card">
+              <h3>Good demo memories</h3>
+              <ul>
+                <li>"We use Postgres for JSONB + row locking"</li>
+                <li>"Never skip JWT validation in auth layer"</li>
+                <li>"All API responses must be paginated"</li>
+              </ul>
+            </div>
+            <div class="callout">
+              <strong>Tip:</strong> Run <code>lore ui</code> for the interactive terminal browser — great for visual demos.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────── SLIDE 12: Wrap-up ─── -->
+    <div class="slide" id="s12" data-notes="Closing summary. Lore is a local-first, file-based memory system. No accounts, no cloud, no special integrations needed. It works with every AI tool that reads files. The only workflow change: when you make a decision, write it down with lore add. Every AI session after that starts with full context.">
+      <div class="slide-inner" style="text-align:center">
+        <div class="hero-sigil" style="font-size:3.5rem">✦</div>
+        <h2 class="slide-title" style="font-size:clamp(1.5rem,4vw,2.8rem)">All Context. No Repetition.</h2>
+        <p style="font-size:1.1rem; color:var(--parchment-dark); font-style:italic; margin: 1rem auto; max-width:520px">
+          Record knowledge once. Every AI session inherits it. Every team member starts with full context.
+        </p>
+        <hr class="gold-rule" style="max-width:480px; margin: 1.5rem auto">
+        <div class="three-col" style="max-width:680px; margin:0 auto; text-align:left">
+          <div class="card" style="padding:1.25rem 1.5rem">
+            <h3>Install</h3>
+            <div class="terminal" style="padding:0.5rem 0.75rem; font-size:0.78rem">
+              <span class="prompt">$</span> pip install lore-book
+            </div>
+          </div>
+          <div class="card" style="padding:1.25rem 1.5rem">
+            <h3>Start</h3>
+            <div class="terminal" style="padding:0.5rem 0.75rem; font-size:0.78rem">
+              <span class="prompt">$</span> lore onboard
+            </div>
+          </div>
+          <div class="card" style="padding:1.25rem 1.5rem">
+            <h3>Explore</h3>
+            <div class="terminal" style="padding:0.5rem 0.75rem; font-size:0.78rem">
+              <span class="prompt">$</span> lore ui
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:2rem; display:flex; justify-content:center; gap:1.5rem; flex-wrap:wrap">
+          <a href="https://github.com/CptPlastic/lore-book" style="color:var(--gold); font-family:'Cinzel',serif; font-size:0.8rem; letter-spacing:0.1em; text-decoration:none">✦ GitHub</a>
+          <a href="https://pypi.org/project/lore-book/" style="color:var(--gold); font-family:'Cinzel',serif; font-size:0.8rem; letter-spacing:0.1em; text-decoration:none">⚜ PyPI</a>
+          <a href="index.html" style="color:var(--gold); font-family:'Cinzel',serif; font-size:0.8rem; letter-spacing:0.1em; text-decoration:none">📜 Docs</a>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /slides -->
+
+  <!-- ── Navigation bar ── -->
+  <div id="nav">
+    <button class="nav-btn" id="btn-prev" disabled>← PREV</button>
+
+    <div style="display:flex; align-items:center; gap:1rem">
+      <span id="slide-counter">1 / 13</span>
+      <span id="kbd-hint">← → SPACE</span>
+      <button id="notes-toggle">NOTES</button>
+      <button id="fs-btn" title="Fullscreen">⛶</button>
+    </div>
+
+    <button class="nav-btn" id="btn-next">NEXT →</button>
+  </div>
+</div><!-- /deck -->
+
+<div id="notes-panel">
+  <p id="notes-text"></p>
+</div>
+
+<script>
+(() => {
+  /* ── Sparkles ─────────────────────────────────────────────── */
+  const canvas = document.getElementById("sparkles");
+  const ctx    = canvas.getContext("2d");
+  const glyphs = ["✦","✧","⋆","·","✵","✴","⚝","∗"];
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const count  = reduced ? 15 : 45;
+  let W = 0, H = 0, parts = [];
+
+  function rand(a,b){ return Math.random()*(b-a)+a; }
+  function spawn(){
+    return { x:rand(0,W), y:rand(-H*.5,H*.15),
+             vx:rand(-.12,.12), vy:rand(.1,.38),
+             life:0, maxLife:rand(150,300),
+             size:rand(8,16), glyph:glyphs[Math.floor(Math.random()*glyphs.length)],
+             hue:rand(38,52) };
+  }
+  function resize(){ W=canvas.width=innerWidth; H=canvas.height=innerHeight; }
+  function init(){
+    parts=[];
+    for(let i=0;i<count;i++){ const p=spawn(); p.life=rand(0,p.maxLife); parts.push(p); }
+  }
+  function drawSparkles(){
+    ctx.clearRect(0,0,W,H);
+    for(const p of parts){
+      const t=p.life/p.maxLife;
+      let a=1;
+      if(t<.15) a=t/.15; else if(t>.75) a=(1-t)/.25;
+      ctx.globalAlpha=a*.6;
+      ctx.fillStyle=`hsl(${p.hue},90%,70%)`;
+      ctx.font=`${p.size}px serif`;
+      ctx.fillText(p.glyph,p.x,p.y);
+      p.x+=p.vx; p.y+=p.vy; p.life++;
+      if(p.life>=p.maxLife) Object.assign(p,spawn(),{life:0});
+    }
+    ctx.globalAlpha=1;
+    requestAnimationFrame(drawSparkles);
+  }
+  addEventListener("resize",()=>{ resize(); init(); });
+  resize(); init(); drawSparkles();
+
+  /* ── Slide deck ───────────────────────────────────────────── */
+  const slides   = Array.from(document.querySelectorAll(".slide"));
+  const total    = slides.length;
+  let current    = 0;
+  let animating  = false;
+
+  const counter  = document.getElementById("slide-counter");
+  const bar      = document.getElementById("progress-bar");
+  const btnPrev  = document.getElementById("btn-prev");
+  const btnNext  = document.getElementById("btn-next");
+  const notesTgl = document.getElementById("notes-toggle");
+  const notesPanel = document.getElementById("notes-panel");
+  const notesText  = document.getElementById("notes-text");
+  const fsBtn    = document.getElementById("fs-btn");
+
+  function updateUI(){
+    counter.textContent = `${current+1} / ${total}`;
+    bar.style.width = `${((current+1)/total)*100}%`;
+    btnPrev.disabled = current === 0;
+    btnNext.disabled = current === total-1;
+    notesText.textContent = slides[current].dataset.notes || "";
+  }
+
+  function goTo(idx){
+    if(animating || idx === current || idx < 0 || idx >= total) return;
+    animating = true;
+    const dir = idx > current ? 1 : -1;
+    const prev = slides[current];
+    const next = slides[idx];
+
+    prev.classList.add("exit-up");
+    prev.addEventListener("transitionend", () => {
+      prev.classList.remove("active","exit-up");
+    }, { once: true });
+
+    next.style.transform = `translateY(${dir===1?'28px':'-28px'})`;
+    next.style.opacity   = "0";
+    next.classList.add("active");
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        next.style.transform = "";
+        next.style.opacity   = "";
+        setTimeout(()=>{ animating=false; }, 450);
+      });
+    });
+
+    current = idx;
+    updateUI();
+    triggerSlideAnimations(idx);
+  }
+
+  btnPrev.addEventListener("click", ()=> goTo(current-1));
+  btnNext.addEventListener("click", ()=> goTo(current+1));
+
+  document.addEventListener("keydown", e => {
+    if(e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    if(e.key==="ArrowRight"||e.key==="ArrowDown"||e.key===" ") { e.preventDefault(); goTo(current+1); }
+    if(e.key==="ArrowLeft" ||e.key==="ArrowUp")                 { e.preventDefault(); goTo(current-1); }
+    if(e.key==="Home") goTo(0);
+    if(e.key==="End")  goTo(total-1);
+    if(e.key.toLowerCase()==="n") notesTgl.click();
+    if(e.key.toLowerCase()==="f") fsBtn.click();
+  });
+
+  /* Touch swipe */
+  let touchX = 0;
+  document.addEventListener("touchstart", e => { touchX = e.touches[0].clientX; }, {passive:true});
+  document.addEventListener("touchend", e => {
+    const dx = e.changedTouches[0].clientX - touchX;
+    if(Math.abs(dx)>50){ goTo(dx < 0 ? current+1 : current-1); }
+  }, {passive:true});
+
+  /* Notes panel */
+  notesTgl.addEventListener("click", ()=>{
+    notesPanel.classList.toggle("open");
+    notesTgl.textContent = notesPanel.classList.contains("open") ? "HIDE NOTES" : "NOTES";
+  });
+
+  /* Fullscreen */
+  fsBtn.addEventListener("click", ()=>{
+    if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.(); }
+    else { document.exitFullscreen?.(); }
+  });
+
+  /* ── Typewriter for install slide ───────────────────────── */
+  const twQueue = {};
+
+  function typewrite(id, text, delay=0, onDone){
+    const el  = document.getElementById(id);
+    const cur = document.getElementById("cur-"+id.replace("tw-",""));
+    if(!el) return;
+    el.textContent="";
+    if(cur) cur.style.display="inline-block";
+    let i=0;
+    setTimeout(()=>{
+      const iv = setInterval(()=>{
+        el.textContent = text.slice(0,++i);
+        if(i>=text.length){
+          clearInterval(iv);
+          if(onDone) onDone();
+          else if(cur) setTimeout(()=>{ cur.style.display="none"; }, 1500);
+        }
+      }, 38);
+      twQueue[id]=iv;
+    }, delay);
+  }
+
+  const animated = new Set();
+
+  function triggerSlideAnimations(idx){
+    if(animated.has(idx)) return;
+    animated.add(idx);
+
+    if(idx===3){ /* Install slide */
+      typewrite("tw-install","pip install lore-book", 200, ()=>{
+        document.getElementById("cur-install").style.display="none";
+        typewrite("tw-devinst","pip install -e .", 400);
+      });
+    }
+  }
+
+  /* ── Init ─────────────────────────────────────────────────── */
+  updateUI();
+  triggerSlideAnimations(0);
+})();
+</script>
+</body>
+</html>
