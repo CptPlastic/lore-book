@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.prep.outputs.tag }}
 
     steps:
       - name: Checkout
@@ -91,3 +93,30 @@ jobs:
           gh release create "${{ steps.prep.outputs.tag }}" \
             --title "${{ steps.prep.outputs.tag }}" \
             --notes-file .release-notes.md
+
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: pypi
+    permissions:
+      id-token: write  # required for trusted publishing
+      contents: read
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build
+        run: pip install build
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # release/v1
