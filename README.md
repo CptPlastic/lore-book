@@ -368,6 +368,20 @@ The generated hook is clearly marked `# Installed by lore`. Remove it safely wit
 lore hook uninstall
 ```
 
+### Post-merge CHRONICLE sync hook
+
+Install a post-merge hook that syncs shared `CHRONICLE.md` updates into local `.lore/` whenever pull/merge changes the chronicle:
+
+```sh
+lore hook sync-install
+```
+
+Remove it safely with:
+
+```sh
+lore hook sync-uninstall
+```
+
 ### Extracting from past commits
 
 ```sh
@@ -376,6 +390,29 @@ lore extract --last 20
 ```
 
 Lore scans commit messages for structured knowledge and adds it to your store.
+
+### Syncing shared CHRONICLE updates
+
+If a teammate updates `CHRONICLE.md` and you pull those changes, import them back into your local `.lore/` store with:
+
+```sh
+lore sync
+```
+
+Useful flags:
+
+```sh
+# Preview only
+lore sync --dry-run
+
+# Import from a different markdown file
+lore sync --file ./path/to/CHRONICLE.md
+
+# Import only (skip export pass)
+lore sync --no-export
+```
+
+`lore sync` deduplicates by category/content (and scope tags for instructions), so re-running it is safe.
 
 ---
 
@@ -479,6 +516,27 @@ PYTHON_BIN=python3.12 ./smoke.sh
 KEEP_SMOKE=1 ./smoke.sh
 ```
 
+## Automated releases
+
+Use the GitHub Actions workflow `Prepare Release` to automate versioning and changelog updates.
+
+What it does:
+
+- bumps `src/lore/__init__.py` version (`patch`, `minor`, `major`, or explicit version)
+- generates/updates `CHANGELOG.md` from commit subjects since the last tag
+- commits and pushes the version + changelog update
+- creates and pushes a git tag
+- creates a GitHub Release with generated release notes
+- triggers the existing PyPI publish workflow when the release is published
+
+How to run it:
+
+1. Open GitHub Actions for this repo.
+2. Run `Prepare Release`.
+3. Choose `bump` (`patch`/`minor`/`major`) or provide an explicit `version`.
+
+After it completes, you should see a new tag, updated `CHANGELOG.md`, and a published release.
+
 ---
 
 ## Corporate proxy / Artifactory
@@ -505,6 +563,7 @@ Run `lore doctor` to confirm the model downloads and loads from your endpoint.
 | `search` | `<query>` | Semantic search across all spells |
 | `remove` | `<id>` | Delete a spell |
 | `extract` | `[--last N]` | Pull spells from git commit messages |
+| `sync` | `[--file PATH] [--dry-run] [--no-export]` | Import shared `CHRONICLE.md` entries into local `.lore/` |
 | `export` | `[--format F]` | Write AI context files (`chronicle`, `agents`, `copilot`, `cursor`, `claude`, `prompt`, `windsurf`, `gemini`, `cline`, `aider`, `all`) |
 | `config` | `<key> <value>` | Set a config value |
 | `security` | | Configure the security preamble for exports |
@@ -513,6 +572,8 @@ Run `lore doctor` to confirm the model downloads and loads from your endpoint.
 | `trust explain` | `<id> [--recompute]` | Show trust signals and scoring reasons for one memory |
 | `hook install` | | Install git post-commit hook (wizard) |
 | `hook uninstall` | | Safely remove the lore-managed git hook |
+| `hook sync-install` | | Install git post-merge hook to sync `CHRONICLE.md` into `.lore/` |
+| `hook sync-uninstall` | | Safely remove the lore-managed post-merge sync hook |
 | `index rebuild` | | Rebuild the semantic search index from scratch |
 | `ui` | | Open the interactive terminal browser |
 | `awaken` | `[--background]` | Watch `.lore/` and auto-export on change |
@@ -532,6 +593,13 @@ Run `lore <command> --help` for detailed options on any command.
 | Package | Purpose |
 |---|---|
 | `sentence-transformers` | Local semantic embeddings via `all-MiniLM-L6-v2` |
+
+---
+
+## CI/CD workflows
+
+- `.github/workflows/release.yml` — prepares a release, bumps version, updates changelog, tags, and creates GitHub Release
+- `.github/workflows/publish.yml` — publishes to PyPI on `release.published`
 | `gitpython` | Git history extraction |
 | `typer` + `rich` | CLI and terminal output |
 | `textual` | Interactive TUI |

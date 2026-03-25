@@ -103,6 +103,7 @@ _MORE_ROWS = [
     ("list",          "\\[category]",             "list memories, optionally by tome"),
     ("remove",        "<id>",                   "delete a memory by its ID"),
     ("extract",       "\\[--last N]",             "pull memories from recent git commits"),
+    ("sync",          "\\[--file PATH]",          "import shared CHRONICLE entries into .lore"),
     ("init",          "\\[path]",                 "create a .lore store in a directory"),
     ("doctor",        "",                        "check store, model, and search status"),
     ("setup",         "semantic",                "guided setup for dense vector search"),
@@ -113,6 +114,7 @@ _MORE_ROWS = [
     ("config",        "<key> <value>",           "set a config value"),
     ("security",      "",                        "configure security guidelines for exports"),
     ("hook",          "install|uninstall",       "manage the post-commit git hook"),
+    ("hook",          "sync-install|sync-uninstall", "manage CHRONICLE post-merge sync hook"),
     ("index",         "rebuild",                 "rebuild the semantic search index"),
     ("version",       "\\[--check]",              "show version; --check queries PyPI"),
 ]
@@ -1046,6 +1048,64 @@ def edit(
     console.print()
 
 @app.command()
+def sync(
+    file: Annotated[
+        Optional[Path],
+        typer.Option("--file", "-f", help="Path to CHRONICLE markdown file (default: ./CHRONICLE.md)"),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Preview how many entries would be added without writing"),
+    ] = False,
+    do_export: Annotated[
+        bool,
+        typer.Option("--export/--no-export", help="Export AI context files after sync"),
+    ] = True,
+) -> None:
+    """Import shared CHRONICLE.md entries into the local .lore store."""
+    from .chronicle import import_chronicle
+    from .search import batch_index_memories
+
+    root = _require_root()
+    chosen = file.resolve() if file else None
+
+    with console.status("Syncing CHRONICLE into local lore store…"):
+        try:
+            stats = import_chronicle(root, chronicle_path=chosen, dry_run=dry_run)
+        except RuntimeError as exc:
+            err_console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1)
+
+    if not dry_run and stats["indexed_pairs"]:
+        with console.status("Indexing imported memories…"):
+            batch_index_memories(root, stats["indexed_pairs"])
+
+    mode = "(dry run) " if dry_run else ""
+    console.print(
+        f"[green]{mode}Sync complete.[/green] "
+        f"Added [bold]{stats['added']}[/bold], "
+        f"skipped duplicates [bold]{stats['skipped_duplicates']}[/bold], "
+        f"recognized [bold]{stats['recognized']}[/bold] bullets."
+    )
+
+    if stats["skipped_unknown_section"]:
+        console.print(
+            f"[yellow]Skipped {stats['skipped_unknown_section']} bullet(s) outside recognized sections.[/yellow]"
+        )
+
+    source_path = stats["path"]
+    rel = source_path.relative_to(root) if source_path.is_relative_to(root) else source_path
+    console.print(f"[dim]Source:[/dim] {rel}")
+
+    if do_export and not dry_run:
+        from .export import export_all
+        with console.status("Exporting updated context files…"):
+            paths = export_all(root)
+        for p in paths:
+            console.print(f"[green]Wrote[/green] {p.relative_to(root)}")
+
+
+@app.command()
 def extract(
     last: Annotated[
         int,
@@ -1304,6 +1364,102 @@ def hook_uninstall() -> None:
     try:
         uninstall_git_hook(root)
         console.print(f"  [bold #39ff14]✓[/bold #39ff14]  Hook removed.")
+    except RuntimeError as e:
+        err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=1)
+
+
+@hook_app.command("sync-install")
+def hook_sync_install() -> None:
+    """Install a post-merge hook that syncs CHRONICLE.md changes into .lore."""
+    from .extract import install_post_merge_sync_hook, _is_git_repo
+    from rich.prompt import Confirm
+    from rich.syntax import Syntax
+
+    root = _require_root()
+
+    if not _is_git_repo(root):
+        err_console.print(
+            f"[red]  ✗  {root} is not a git repository. Run [bold]git init[/bold] first.[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    hook_path = root / ".git" / "hooks" / "post-merge"
+    if hook_path.exists():
+        existing = hook_path.read_text()
+        console.print(f"  [bold {_A}]▲[/bold {_A}]  A post-merge hook already exists:")
+        console.print()
+        console.print(Syntax(existing, "sh", theme="ansi_dark", line_numbers=False))
+        console.print()
+        if not Confirm.ask(
+            f"  [bold {_P}]Overwrite it?[/bold {_P}]", default=False
+        ):
+            console.print(f"  [dim]Cancelled — existing hook left in place.[/dim]\n")
+            raise typer.Exit()
+
+    preview = "\n".join([
+        "#!/bin/sh",
+        "# Installed by lore -- chronicle sync",
+        "if git diff --name-only ORIG_HEAD HEAD | grep -q '^CHRONICLE.md$'; then",
+        "  lore sync --no-export >/dev/null 2>&1",
+        "  lore export >/dev/null 2>&1",
+        "fi",
+        "",
+    ])
+
+    console.print(f"  [dim]───────────────────────────────[/dim]")
+    console.print(f"  [bold]Hook script preview:[/bold]")
+    console.print()
+    console.print(Syntax(preview, "sh", theme="ansi_dark", line_numbers=False))
+    console.print(f"  [dim]Will be written to:[/dim] [bold]{hook_path}[/bold]")
+    console.print(f"  [dim]───────────────────────────────[/dim]")
+    console.print()
+
+    if not Confirm.ask(f"  [bold {_P}]Install this hook?[/bold {_P}]", default=True):
+        console.print(f"  [dim]Cancelled. Nothing was written.[/dim]\n")
+        raise typer.Exit()
+
+    try:
+        path = install_post_merge_sync_hook(root)
+        console.print()
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  Sync hook installed at [bold]{path}[/bold]")
+        console.print(
+            "  [dim]After git merge/pull, lore will sync when CHRONICLE.md changes.[/dim]"
+        )
+    except RuntimeError as e:
+        err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=1)
+
+
+@hook_app.command("sync-uninstall")
+def hook_sync_uninstall() -> None:
+    """Remove the lore-managed post-merge CHRONICLE sync hook."""
+    from .extract import uninstall_post_merge_sync_hook
+    from rich.prompt import Confirm
+
+    root = _require_root()
+    hook_path = root / ".git" / "hooks" / "post-merge"
+
+    if not hook_path.exists():
+        console.print("[yellow]No post-merge hook found — nothing to remove.[/yellow]")
+        raise typer.Exit()
+
+    content = hook_path.read_text()
+    if "# Installed by lore -- chronicle sync" not in content:
+        err_console.print(
+            f"[red]The hook at {hook_path} was not installed by lore.[/red]\n"
+            "[dim]Remove it manually to avoid accidentally deleting someone else's hook.[/dim]"
+        )
+        raise typer.Exit(code=1)
+
+    console.print(f"  [dim]Will remove:[/dim] [bold]{hook_path}[/bold]")
+    if not Confirm.ask(f"  [bold #39ff14]Remove the hook?[/bold #39ff14]", default=False):
+        console.print("  [dim]Cancelled — hook left in place.[/dim]")
+        raise typer.Exit()
+
+    try:
+        uninstall_post_merge_sync_hook(root)
+        console.print(f"  [bold #39ff14]✓[/bold #39ff14]  Sync hook removed.")
     except RuntimeError as e:
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=1)

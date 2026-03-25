@@ -232,3 +232,47 @@ def uninstall_git_hook(root: Path) -> bool:
         )
     hook_path.unlink()
     return True
+
+
+def install_post_merge_sync_hook(root: Path) -> Path:
+    """Write a post-merge hook that syncs CHRONICLE updates into .lore.
+
+    The hook only runs sync when CHRONICLE.md changed in the merge.
+    """
+    if not _is_git_repo(root):
+        raise RuntimeError(f"{root} is not a git repository (no .git directory found)")
+
+    hooks_dir = root / ".git" / "hooks"
+    hooks_dir.mkdir(exist_ok=True)
+    hook_path = hooks_dir / "post-merge"
+
+    lines = [
+        "#!/bin/sh",
+        "# Installed by lore -- chronicle sync",
+        "if git diff --name-only ORIG_HEAD HEAD | grep -q '^CHRONICLE.md$'; then",
+        "  lore sync --no-export >/dev/null 2>&1",
+        "  lore export >/dev/null 2>&1",
+        "fi",
+        "",  # trailing newline
+    ]
+
+    hook_path.write_text("\n".join(lines))
+    hook_path.chmod(0o755)
+    return hook_path
+
+
+def uninstall_post_merge_sync_hook(root: Path) -> bool:
+    """Remove the lore-managed post-merge sync hook."""
+    if not _is_git_repo(root):
+        raise RuntimeError(f"{root} is not a git repository")
+    hook_path = root / ".git" / "hooks" / "post-merge"
+    if not hook_path.exists():
+        return False
+    content = hook_path.read_text()
+    if "# Installed by lore -- chronicle sync" not in content:
+        raise RuntimeError(
+            "The post-merge hook was not installed by lore — refusing to remove it.\n"
+            f"Edit it manually: {hook_path}"
+        )
+    hook_path.unlink()
+    return True
