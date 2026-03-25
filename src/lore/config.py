@@ -1,6 +1,7 @@
 """Configuration loading and resolution for mem."""
 from __future__ import annotations
 
+import os
 import random
 import uuid
 from pathlib import Path
@@ -93,6 +94,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "codeowners": True,
         "custom_rules": [],
     },
+    # Controls how subdirectories discover this store.
+    # "auto"  — walk up from any subdirectory (default, backward-compatible).
+    # "local" — only the directory containing .lore/ can use this store;
+    #            subdirectories will not inherit it.
+    "scope": "auto",
     # Trust scoring controls for shared chronicle export and ranking.
     "trust": {
         "default_score": 50,
@@ -105,10 +111,43 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 
 def find_memory_root(start: Path | None = None) -> Path | None:
-    """Walk up from *start* (default: cwd) looking for a .lore directory."""
-    path = (start or Path.cwd()).resolve()
-    for parent in [path, *path.parents]:
+    """Walk up from *start* (default: cwd) looking for a .lore directory.
+
+    Resolution order:
+    1. ``LORE_ROOT`` environment variable — explicit root pin; the path must
+       contain a ``.lore/`` directory or ``None`` is returned.
+    2. Walk up from *start* toward the filesystem root.  If a store is found
+       in the current directory it is always returned.  If it is found in a
+       *parent* directory, the store's ``scope`` config key is checked:
+       - ``"auto"`` (default) — inherit the parent store (current behaviour).
+       - ``"local"`` — do **not** inherit; return ``None`` so the caller sees
+         no active store, preventing unintentional cross-directory bleed.
+    """
+    # 1. Explicit root override.
+    env_root = os.environ.get("LORE_ROOT")
+    if env_root:
+        p = Path(env_root).resolve()
+        return p if (p / MEMORY_DIR).is_dir() else None
+
+    # 2. Walk up the directory tree.
+    cwd = (start or Path.cwd()).resolve()
+    for parent in [cwd, *cwd.parents]:
         if (parent / MEMORY_DIR).is_dir():
+            if parent == cwd:
+                # Directly inside the store's own directory — always valid.
+                return parent
+            # Found in a parent directory; honour the store's scope setting.
+            cfg_path = parent / MEMORY_DIR / CONFIG_FILE
+            if cfg_path.exists():
+                try:
+                    with cfg_path.open() as _f:
+                        _raw = yaml.safe_load(_f) or {}
+                    if _raw.get("scope", "auto") == "local":
+                        # Store is local-only; this subdirectory should not
+                        # inherit it.  Stop searching — don't walk further up.
+                        return None
+                except Exception:
+                    pass
             return parent
     return None
 
