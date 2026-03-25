@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.3.0 - 2026-03-25
+
+- Maintenance release.
+
 ## v1.2.11 - 2026-03-25
 
 ### Other
