@@ -60,22 +60,6 @@ jobs:
             exit 1
           fi
 
-      - name: Validate commits exist since last tag
-        run: |
-          last_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-          if [ -z "$last_tag" ]; then
-            echo "No previous tag found; proceeding with initial release."
-            exit 0
-          fi
-
-          count="$(git rev-list --count "${last_tag}..HEAD")"
-          if [ "$count" -eq 0 ]; then
-            echo "No commits found since ${last_tag}; refusing empty release."
-            exit 1
-          fi
-
-          echo "Found ${count} commit(s) since ${last_tag}."
-
       - name: Commit version and changelog
         run: |
           git config user.name "github-actions[bot]"

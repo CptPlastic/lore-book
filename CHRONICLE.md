@@ -32,6 +32,11 @@ Introduce CHRONICLE import/sync and release automation.
 - Update README.md with docs for the CHRONICLE sync hooks, the new lore sync command, and the automated release workflow.
 
 These changes enable teammates to import shared CHRONICLE entries safely and automate release/versioning from CI. _(trust: low 50)_
+- Add PyPI publish job and CHRONICLE notes
+
+Expose the release tag output and add a new `publish` job in the GitHub Actions workflow that runs after `release`. The publish job checks out the release tag, sets up Python 3.12, builds distributions with `python -m build`, and publishes to PyPI via pypa/gh-action-pypi-publish.
+
+Update CHRONICLE.md (date bump) to document the new CHRONICLE import/sync and automated release changes: conservative CHRONICLE importer, CLI sync command and hooks, post-merge hook helpers, scripts/prepare_release.py, and the release workflow that bumps/sets versions, generates CHANGELOG/release notes, tags, and creates GitHub Releases. These changes enable importing shared CHRONICLE entries and automating release/versioning from CI. _(trust: low 50)_
 
 ## Summaries
 
