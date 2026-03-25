@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.11 - 2026-03-25
+
+### Other
+- Remove commit validation; update CHRONICLE
+- Merge branch 'main' of https://github.com/CptPlastic/lore-book
+- Add PyPI publish job and CHRONICLE notes
+
 ## v1.2.10 - 2026-03-25
 
 ### Documentation
