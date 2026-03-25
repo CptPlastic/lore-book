@@ -86,6 +86,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # Set to false to skip SSL verification (not recommended for prod):
     #   model_ssl_verify: false
     "model_ssl_verify": True,
+    # Automatically install newer lore versions when running plain `lore`.
+    # Default is off; enable with: lore config auto_update true
+    "auto_update": False,
+    # When `lore awaken` is running, also watch CHRONICLE.md and import changes.
+    # Disable with: lore config auto_sync_chronicle false
+    "auto_sync_chronicle": True,
     # Security preamble injected into all AI context file exports:
     "security": {
         "enabled": False,

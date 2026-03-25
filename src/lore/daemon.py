@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import signal
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -37,34 +38,50 @@ class _LoreEventHandler(FileSystemEventHandler):
         self,
         root: Path,
         debounce: float,
-        on_change: Callable[[str], None],
+        on_yaml_change: Callable[[str], None],
+        on_chronicle_change: Callable[[str], None] | None = None,
+        chronicle_path: Path | None = None,
     ) -> None:
         super().__init__()
         self._root = root
         self._debounce = debounce
-        self._on_change = on_change
-        self._timer: threading.Timer | None = None
+        self._on_yaml_change = on_yaml_change
+        self._on_chronicle_change = on_chronicle_change
+        self._chronicle_path = (chronicle_path or (root / "CHRONICLE.md")).resolve()
+        self._timers: dict[str, threading.Timer] = {}
         self._lock = threading.Lock()
 
-    def _schedule(self, src_path: str) -> None:
+    def _schedule(self, key: str, callback: Callable[[str], None], src_path: str) -> None:
         with self._lock:
-            if self._timer is not None:
-                self._timer.cancel()
-            self._timer = threading.Timer(self._debounce, self._on_change, args=(src_path,))
-            self._timer.daemon = True
-            self._timer.start()
+            existing = self._timers.get(key)
+            if existing is not None:
+                existing.cancel()
+            timer = threading.Timer(self._debounce, callback, args=(src_path,))
+            timer.daemon = True
+            self._timers[key] = timer
+            timer.start()
+
+    def _is_chronicle(self, src_path: str) -> bool:
+        return Path(src_path).resolve() == self._chronicle_path
+
+    def _handle_event(self, src_path: str) -> None:
+        if src_path.endswith(".yaml"):
+            self._schedule("yaml", self._on_yaml_change, src_path)
+            return
+        if self._on_chronicle_change and self._is_chronicle(src_path):
+            self._schedule("chronicle", self._on_chronicle_change, src_path)
 
     def on_modified(self, event: FileSystemEvent) -> None:
-        if not event.is_directory and str(event.src_path).endswith(".yaml"):
-            self._schedule(str(event.src_path))
+        if not event.is_directory:
+            self._handle_event(str(event.src_path))
 
     def on_created(self, event: FileSystemEvent) -> None:
-        if not event.is_directory and str(event.src_path).endswith(".yaml"):
-            self._schedule(str(event.src_path))
+        if not event.is_directory:
+            self._handle_event(str(event.src_path))
 
     def on_deleted(self, event: FileSystemEvent) -> None:
-        if not event.is_directory and str(event.src_path).endswith(".yaml"):
-            self._schedule(str(event.src_path))
+        if not event.is_directory:
+            self._handle_event(str(event.src_path))
 
 
 _PID_FILENAME = "spellbook.pid"
@@ -80,6 +97,7 @@ def run_spellbook(
     debounce: float = 1.5,
     on_state_change: Callable[[SpellbookState], None] | None = None,
     stop_event: threading.Event | None = None,
+    sync_chronicle: bool = True,
 ) -> None:
     """Start the spellbook daemon loop — blocks until stop_event is set.
 
@@ -90,23 +108,54 @@ def run_spellbook(
         stop_event: Threading event; set it to stop the loop cleanly.
     """
     from .config import memory_dir
+    from .chronicle import import_chronicle
     from .export import export_all
+    from .search import batch_index_memories
 
     if stop_event is None:
         stop_event = threading.Event()
 
     state = SpellbookState(status=SpellbookStatus.WATCHING)
+    chronicle_path = root / "CHRONICLE.md"
+    ignore_chronicle_until = 0.0
 
     def _notify() -> None:
         if on_state_change:
             on_state_change(state)
 
     def _do_export(src_path: str) -> None:
+        nonlocal ignore_chronicle_until
         state.status = SpellbookStatus.CASTING
         state.last_scroll = Path(src_path).name
         _notify()
         try:
             export_all(root)
+            ignore_chronicle_until = time.time() + max(2.0, debounce * 2)
+            state.cast_count += 1
+            state.last_cast = datetime.now(timezone.utc)
+        except Exception as exc:
+            state.errors.append(str(exc))
+        finally:
+            state.status = SpellbookStatus.WATCHING
+            _notify()
+
+    def _do_sync_chronicle(src_path: str) -> None:
+        nonlocal ignore_chronicle_until
+        if not sync_chronicle:
+            return
+        if time.time() < ignore_chronicle_until:
+            return
+
+        state.status = SpellbookStatus.CASTING
+        state.last_scroll = Path(src_path).name
+        _notify()
+        try:
+            stats = import_chronicle(root, chronicle_path, dry_run=False)
+            added = int(stats.get("added", 0) or 0)
+            if added:
+                batch_index_memories(root, added)
+            export_all(root)
+            ignore_chronicle_until = time.time() + max(2.0, debounce * 2)
             state.cast_count += 1
             state.last_cast = datetime.now(timezone.utc)
         except Exception as exc:
@@ -116,9 +165,17 @@ def run_spellbook(
             _notify()
 
     watch_path = str(memory_dir(root))
-    handler = _LoreEventHandler(root, debounce, _do_export)
+    handler = _LoreEventHandler(
+        root,
+        debounce,
+        on_yaml_change=_do_export,
+        on_chronicle_change=_do_sync_chronicle if sync_chronicle else None,
+        chronicle_path=chronicle_path,
+    )
     observer = Observer()
     observer.schedule(handler, watch_path, recursive=True)
+    if sync_chronicle:
+        observer.schedule(handler, str(root), recursive=False)
     observer.start()
 
     state.status = SpellbookStatus.WATCHING
@@ -134,7 +191,7 @@ def run_spellbook(
         _notify()
 
 
-def daemonize(root: Path, debounce: float = 1.5) -> None:
+def daemonize(root: Path, debounce: float = 1.5, sync_chronicle: bool = True) -> None:
     """Fork into background, detach from terminal, and write PID file.
 
     The calling process returns immediately after the first fork so the
@@ -172,7 +229,7 @@ def daemonize(root: Path, debounce: float = 1.5) -> None:
     signal.signal(signal.SIGTERM, _on_sigterm)
 
     try:
-        run_spellbook(root, debounce=debounce)
+        run_spellbook(root, debounce=debounce, sync_chronicle=sync_chronicle)
     finally:
         pf.unlink(missing_ok=True)
         os._exit(0)

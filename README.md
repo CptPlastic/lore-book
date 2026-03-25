@@ -414,6 +414,51 @@ lore sync --no-export
 
 `lore sync` deduplicates by category/content (and scope tags for instructions), so re-running it is safe.
 
+If you run the watcher daemon, CHRONICLE sync can happen automatically:
+
+```sh
+lore awaken
+```
+
+By default, `lore awaken` watches `.lore/` changes for export and also watches `CHRONICLE.md` to import/sync changes back into `.lore`.
+
+Config toggles:
+
+```sh
+# Disable CHRONICLE auto-sync while daemon is running
+lore config auto_sync_chronicle false
+
+# Re-enable it
+lore config auto_sync_chronicle true
+```
+
+You can also override per run:
+
+```sh
+lore awaken --no-sync-chronicle
+```
+
+## Updates
+
+```sh
+# Check for updates
+lore update --check-only
+
+# Prompted install
+lore update
+
+# Non-interactive install
+lore update --yes
+```
+
+Optional startup auto-update toggle:
+
+```sh
+lore config auto_update true
+```
+
+With `auto_update` enabled, running plain `lore` will check PyPI and auto-install newer versions when available.
+
 ---
 
 ## Security guidelines
@@ -575,8 +620,10 @@ Run `lore doctor` to confirm the model downloads and loads from your endpoint.
 | `hook sync-install` | | Install git post-merge hook to sync `CHRONICLE.md` into `.lore/` |
 | `hook sync-uninstall` | | Safely remove the lore-managed post-merge sync hook |
 | `index rebuild` | | Rebuild the semantic search index from scratch |
+| `version` | `[--check]` | Show installed lore version and optionally check PyPI |
+| `update` | `[--check-only] [--yes]` | Check for a new version and optionally install it |
+| `awaken` | `[--background] [--debounce S] [--sync-chronicle/--no-sync-chronicle]` | Watch `.lore` for export and optionally sync `CHRONICLE.md` changes |
 | `ui` | | Open the interactive terminal browser |
-| `awaken` | `[--background]` | Watch `.lore/` and auto-export on change |
 | `slumber` | | Stop the background daemon |
 | `relic capture` | `[--file F] [--git-diff] [--git-log N] [--clipboard] [--stdin] [--title T] [--tags T]` | Capture a raw artifact |
 | `relic list` | | List relics with content preview |

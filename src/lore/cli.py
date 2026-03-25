@@ -54,6 +54,15 @@ app.add_typer(setup_app, name="setup")
 app.add_typer(trust_app, name="trust")
 
 
+def _latest_pypi_version(timeout: int = 5) -> str:
+    import json as _json
+    import urllib.request
+
+    with urllib.request.urlopen("https://pypi.org/pypi/lore-book/json", timeout=timeout) as resp:  # noqa: S310
+        data = _json.loads(resp.read())
+    return str(data["info"]["version"])
+
+
 # ---------------------------------------------------------------------------
 # lore version
 # ---------------------------------------------------------------------------
@@ -69,14 +78,9 @@ def version(
     console.print(f"lore [bold]{__version__}[/bold]")
     if check:
         try:
-            import urllib.request
-            import json as _json
-            url = "https://pypi.org/pypi/lore-book/json"
-            with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
-                data = _json.loads(resp.read())
-            latest = data["info"]["version"]
+            latest = _latest_pypi_version(timeout=5)
             if latest == __version__:
-                console.print(f"[dim]You are up to date.[/dim]")
+                console.print("[dim]You are up to date.[/dim]")
             else:
                 console.print(
                     f"[bold {_A}]A new version is available:[/bold {_A}] [bold]{latest}[/bold]  "
@@ -84,7 +88,57 @@ def version(
                     f"  [dim]Run: [bold]pip3 install --upgrade lore-book[/bold][/dim]"
                 )
         except Exception:
-            console.print(f"[dim]Could not reach PyPI to check for updates.[/dim]")
+            console.print("[dim]Could not reach PyPI to check for updates.[/dim]")
+
+
+@app.command()
+def update(
+    check_only: Annotated[
+        bool,
+        typer.Option("--check-only", help="Only check whether an update is available"),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Apply update without confirmation"),
+    ] = False,
+) -> None:
+    """Check for an update and optionally install it in the current Python environment."""
+    import subprocess
+    import sys
+    from rich.prompt import Confirm
+
+    try:
+        latest = _latest_pypi_version(timeout=5)
+    except Exception:
+        err_console.print("[red]Could not reach PyPI to check for updates.[/red]")
+        raise typer.Exit(code=1)
+
+    if latest == __version__:
+        console.print(f"[dim]You are up to date ({__version__}).[/dim]")
+        return
+
+    console.print(
+        f"[bold {_A}]UPDATE available:[/bold {_A}] [bold]{latest}[/bold] "
+        f"[dim](you have {__version__})[/dim]"
+    )
+
+    if check_only:
+        return
+
+    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "lore-book"]
+    console.print(f"[dim]Running:[/dim] {' '.join(cmd)}")
+
+    if not yes and not Confirm.ask(f"  [bold {_P}]Install update now?[/bold {_P}]", default=True):
+        console.print("[dim]Cancelled.[/dim]")
+        raise typer.Exit()
+
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        err_console.print("[red]Update failed. Try the command manually.[/red]")
+        raise typer.Exit(code=1)
+
+    console.print("[bold #39ff14]✓[/bold #39ff14]  Update completed.")
+    console.print("[dim]Open a new shell (or rerun the command) to pick up the new version.[/dim]")
 
 console     = Console(color_system=_color_system, force_terminal=_force_color)
 err_console = Console(stderr=True, color_system=_color_system, force_terminal=_force_color)
@@ -109,7 +163,7 @@ _MORE_ROWS = [
     ("setup",         "semantic",                "guided setup for dense vector search"),
     ("trust",         "refresh",                 "recompute memory trust from git signals"),
     ("trust",         "explain <id>",            "show trust score inputs for one memory"),
-    ("awaken",        "\\[--background]",         "👁  watch .lore and auto-export on change"),
+    ("awaken",        "\\[--background] \\[--sync-chronicle]", "👁  watch .lore and auto-export; optionally sync CHRONICLE"),
     ("slumber",       "",                        "banish the background daemon"),
     ("config",        "<key> <value>",           "set a config value"),
     ("security",      "",                        "configure security guidelines for exports"),
@@ -117,6 +171,7 @@ _MORE_ROWS = [
     ("hook",          "sync-install|sync-uninstall", "manage CHRONICLE post-merge sync hook"),
     ("index",         "rebuild",                 "rebuild the semantic search index"),
     ("version",       "\\[--check]",              "show version; --check queries PyPI"),
+    ("update",        "\\[--check-only] \\[--yes]", "check for updates and optionally install"),
 ]
 
 
@@ -161,26 +216,50 @@ def _root(
 
     console.print()
 
-    # Background update check — non-blocking, silent on error or up-to-date.
-    def _check_update() -> None:
+    from .config import find_memory_root, load_config
+
+    auto_update = False
+    try:
+        cfg_root = find_memory_root()
+        if cfg_root is not None:
+            auto_update = bool(load_config(cfg_root).get("auto_update", False))
+    except Exception:
+        auto_update = False
+
+    # Background update check — non-blocking by default, with optional auto-apply.
+    def _check_update(auto_apply: bool = False) -> None:
         try:
-            import urllib.request
-            import json as _json
-            with urllib.request.urlopen(  # noqa: S310
-                "https://pypi.org/pypi/lore-book/json", timeout=3
-            ) as resp:
-                latest = _json.loads(resp.read())["info"]["version"]
+            latest = _latest_pypi_version(timeout=3)
             if latest != __version__:
                 console.print(
                     f"  [{_A}]✦  Update available:[/{_A}] [bold]{latest}[/bold]"
                     f"  [dim](you have {__version__})[/dim]\n"
-                    f"  [dim]  pip3 install --upgrade lore-book[/dim]\n"
+                    f"  [dim]  Run: lore update[/dim]\n"
                 )
+                if auto_apply:
+                    import subprocess
+                    import sys
+
+                    console.print("  [dim]Auto-update enabled. Installing latest release…[/dim]")
+                    result = subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "--upgrade", "lore-book"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if result.returncode == 0:
+                        console.print("  [bold #39ff14]✓[/bold #39ff14]  Auto-update completed.")
+                    else:
+                        tail = (result.stderr or result.stdout or "").strip().splitlines()
+                        hint = tail[-1] if tail else "pip failed"
+                        console.print(f"  [red]Auto-update failed:[/red] [dim]{hint}[/dim]")
         except Exception:
             pass
 
-    import threading as _threading
-    _threading.Thread(target=_check_update, daemon=True).start()
+    if auto_update:
+        _check_update(auto_apply=True)
+    else:
+        import threading as _threading
+        _threading.Thread(target=_check_update, daemon=True).start()
 
 
 def _require_root() -> Path:
@@ -1770,6 +1849,8 @@ def config_set(
       lore config model_ssl_verify false
       lore config embedding_model all-MiniLM-L6-v2
       lore config scope local
+            lore config auto_update true
+            lore config auto_sync_chronicle false
     """
     from .config import load_config, save_config
     root = _require_root()
@@ -2094,16 +2175,26 @@ def awaken(
         float,
         typer.Option("--debounce", help="Seconds to wait after last change before re-exporting"),
     ] = 1.5,
+    sync_chronicle: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--sync-chronicle/--no-sync-chronicle",
+            help="Also watch CHRONICLE.md and sync imported entries into .lore",
+        ),
+    ] = None,
 ) -> None:
-    """Awaken the spellbook — watch .lore and auto-export AI context on every change."""
+    """Awaken the spellbook — watch .lore and optionally CHRONICLE.md for auto sync/export."""
     import os
     import threading
     import time
     from datetime import datetime, timezone
     from rich.live import Live
     from .daemon import run_spellbook, SpellbookState, SpellbookStatus, daemonize, pid_file
+    from .config import load_config
 
     root = _require_root()
+    cfg = load_config(root)
+    effective_sync_chronicle = bool(cfg.get("auto_sync_chronicle", True)) if sync_chronicle is None else sync_chronicle
     pf = pid_file(root)
 
     # Guard: refuse if a daemon is already awake.
@@ -2124,7 +2215,7 @@ def awaken(
         if not hasattr(os, "fork"):
             err_console.print("[red]Background mode requires POSIX (macOS / Linux).[/red]")
             raise typer.Exit(code=1)
-        daemonize(root, debounce=debounce)
+        daemonize(root, debounce=debounce, sync_chronicle=effective_sync_chronicle)
         console.print(
             f"\n  [bold {_P}]✓[/bold {_P}]  The spellbook stirs in the shadows.\n"
             f"  [dim]Run [bold]lore slumber[/bold] to put it to rest.[/dim]\n"
@@ -2157,6 +2248,7 @@ def awaken(
             f"  [bold {color}]{icon}  {s.status.value.upper()}[/bold {color}]",
             "",
             f"  [dim]Watching :[/dim]  [bold]{root / '.lore'}[/bold]",
+            f"  [dim]Chronicle:[/dim]  [bold]{'enabled' if effective_sync_chronicle else 'disabled'}[/bold]",
             f"  [dim]Last cast:[/dim]  [bold]{last}[/bold]   [dim]({s.cast_count} total)[/dim]",
             f"  [dim]Uptime   :[/dim]  {uptime}",
         ]
@@ -2178,7 +2270,11 @@ def awaken(
     daemon_thread = threading.Thread(
         target=run_spellbook,
         args=(root, debounce),
-        kwargs={"on_state_change": _on_state_change, "stop_event": stop_event},
+        kwargs={
+            "on_state_change": _on_state_change,
+            "stop_event": stop_event,
+            "sync_chronicle": effective_sync_chronicle,
+        },
         daemon=True,
     )
     daemon_thread.start()

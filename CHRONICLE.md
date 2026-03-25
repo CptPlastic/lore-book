@@ -37,6 +37,11 @@ These changes enable teammates to import shared CHRONICLE entries safely and aut
 Expose the release tag output and add a new `publish` job in the GitHub Actions workflow that runs after `release`. The publish job checks out the release tag, sets up Python 3.12, builds distributions with `python -m build`, and publishes to PyPI via pypa/gh-action-pypi-publish.
 
 Update CHRONICLE.md (date bump) to document the new CHRONICLE import/sync and automated release changes: conservative CHRONICLE importer, CLI sync command and hooks, post-merge hook helpers, scripts/prepare_release.py, and the release workflow that bumps/sets versions, generates CHANGELOG/release notes, tags, and creates GitHub Releases. These changes enable importing shared CHRONICLE entries and automating release/versioning from CI. _(trust: low 50)_
+- Remove commit validation; update CHRONICLE
+
+Remove the "Validate commits exist since last tag" step from the release GitHub Actions workflow. This change prevents the workflow from aborting when no commits are detected since the last tag and pairs with recent release/publish updates.
+
+Update CHRONICLE.md to document the new publish job and release workflow enhancements: expose the release tag output, add a `publish` job that checks out the release tag, sets up Python 3.12, builds distributions with `python -m build`, and publishes to PyPI via pypa/gh-action-pypi-publish. Also update notes about CHRONICLE import/sync, CLI sync command, hooks, post-merge helpers, and the scripts used for preparing releases and generating changelogs. _(trust: low 50)_
 
 ## Summaries
 
