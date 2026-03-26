@@ -5,9 +5,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import urllib.request
 from datetime import date
 from pathlib import Path
+
+
+PACKAGE_NAME = "lore-book"
+PYPI_SOURCE_BASE = "https://files.pythonhosted.org/packages/source"
 
 
 def parse_args() -> argparse.Namespace:
@@ -20,8 +25,24 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def pypi_sdist_url(version: str) -> str:
-    return f"https://files.pythonhosted.org/packages/source/l/lore-book/lore-book-{version}.tar.gz"
+def distribution_name_from_sdist_filename(filename: str, version: str) -> str:
+    pattern = re.compile(rf"^(?P<name>.+)-{re.escape(version)}\.tar\.gz$")
+    match = pattern.match(filename)
+    if not match:
+        raise ValueError(f"sdist filename does not match version {version}: {filename}")
+    return match.group("name")
+
+
+def pypi_sdist_url(version: str, sdist_filename: str = "") -> str:
+    if sdist_filename:
+        filename = Path(sdist_filename).name
+        distribution_name = distribution_name_from_sdist_filename(filename, version)
+    else:
+        distribution_name = PACKAGE_NAME.replace("-", "_")
+        filename = f"{distribution_name}-{version}.tar.gz"
+
+    first_letter = distribution_name[0].lower()
+    return f"{PYPI_SOURCE_BASE}/{first_letter}/{distribution_name}/{filename}"
 
 
 def sha256_of_url(url: str) -> str:
@@ -55,17 +76,14 @@ def write_scoop_manifest(root: Path, version: str, url: str, sha256: str) -> Pat
         "autoupdate": {
             "architecture": {
                 "64bit": {
-                    "url": "https://files.pythonhosted.org/packages/source/l/lore-book/lore-book-$version.tar.gz"
+                    "url": "https://files.pythonhosted.org/packages/source/l/lore_book/lore_book-$version.tar.gz"
                 }
             }
         },
         "pre_install": [
-            '$pkg = "lore-book==%s"' % version,
-            'python -m pip install --user --upgrade $pkg',
-            'Set-Content -Path "$dir\\lore.cmd" -Value "@echo off`r`npython -m lore.cli %*" -Encoding Ascii',
-        ],
-        "pre_uninstall": [
-            "python -m pip uninstall -y lore-book",
+            '$pkg = "lore-book==$version"',
+            'python -m pip install --upgrade --target "$dir\\site" $pkg',
+            'Set-Content -Path "$dir\\lore.cmd" -Value "@echo off`r`nsetlocal`r`nset ""PYTHONPATH=%~dp0site;%PYTHONPATH%""`r`npython -c ""from lore.cli import app; app()"" %*" -Encoding Ascii',
         ],
         "bin": "lore.cmd",
     }
@@ -126,13 +144,16 @@ def write_outputs(path: str, scoop_manifest: Path, winget_bundle: Path, sha256: 
 def main() -> int:
     args = parse_args()
     root = Path(args.output_root).resolve()
-    url = pypi_sdist_url(args.version)
+    sdist_file: Path | None = None
     if args.sdist_file:
         sdist_file = Path(args.sdist_file)
         if not sdist_file.is_absolute():
             sdist_file = root / sdist_file
         if not sdist_file.exists():
             raise FileNotFoundError(f"sdist file not found: {sdist_file}")
+
+    url = pypi_sdist_url(args.version, sdist_file.name if sdist_file else "")
+    if sdist_file:
         sha256 = sha256_of_file(sdist_file)
     else:
         sha256 = sha256_of_url(url)
