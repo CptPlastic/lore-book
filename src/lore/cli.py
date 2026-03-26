@@ -222,6 +222,33 @@ def _ensure_gitignore_entries(root: Path, entries: list[str]) -> list[str]:
     return added
 
 
+def _sync_existing_chronicle(root: Path) -> dict[str, object] | None:
+    """Import an existing CHRONICLE into the local store during onboarding.
+
+    This preserves previously logged spells before onboarding republishes the
+    chronicle and adapter files.
+    """
+    from .chronicle import import_chronicle
+
+    chronicle_path = root / "CHRONICLE.md"
+    if not chronicle_path.exists():
+        return None
+
+    preview = import_chronicle(root, chronicle_path=chronicle_path, dry_run=True)
+    if preview["recognized"] == 0:
+        return None
+    if preview["added"] == 0:
+        preview["indexed_pairs"] = []
+        return preview
+
+    stats = import_chronicle(root, chronicle_path=chronicle_path, dry_run=False)
+    if stats["indexed_pairs"]:
+        from .search import batch_index_memories
+
+        batch_index_memories(root, stats["indexed_pairs"])
+    return stats
+
+
 # ---------------------------------------------------------------------------
 # mem init
 # ---------------------------------------------------------------------------
@@ -463,6 +490,17 @@ def onboard() -> None:
     added = _ensure_gitignore_entries(root, [_LORE_GITIGNORE_ENTRY, *LOCAL_AGENT_FILES])
     if added:
         _beat(f"  [bold {_P}]✓[/bold {_P}]  Local adapter files were added to .gitignore.")
+
+    chronicle_stats = _sync_existing_chronicle(root)
+    if chronicle_stats:
+        if int(chronicle_stats["added"]) > 0:
+            _beat(
+                f"  [bold {_P}]✓[/bold {_P}]  Preserved [bold]{chronicle_stats['added']}[/bold] "
+                f"entr{'y' if chronicle_stats['added'] == 1 else 'ies'} from the existing chronicle."
+            )
+            _beat(f"  [dim]Your old spells were merged into the store before publishing.[/dim]")
+        else:
+            _beat(f"  [bold {_P}]✓[/bold {_P}]  The existing chronicle is already reflected in the store.")
 
     cfg = load_config(root)
 
