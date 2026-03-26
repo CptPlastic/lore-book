@@ -1,0 +1,30 @@
+{
+  "version": "1.3.0",
+  "description": "The spellbook for your codebase - chronicle decisions, context, and lessons your AI tools can read.",
+  "homepage": "https://github.com/CptPlastic/lore-book",
+  "license": "FSL-1.1-MIT",
+  "depends": "python",
+  "architecture": {
+    "64bit": {
+      "url": "https://files.pythonhosted.org/packages/source/l/lore-book/lore-book-1.3.0.tar.gz",
+      "hash": "cd09aab4053883dcce462876144ca1547fc25b38fe8e9179e758316aa08d2f47"
+    }
+  },
+  "checkver": "https://pypi.org/pypi/lore-book/json",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://files.pythonhosted.org/packages/source/l/lore-book/lore-book-$version.tar.gz"
+      }
+    }
+  },
+  "pre_install": [
+    "$pkg = \"lore-book==1.3.0\"",
+    "python -m pip install --user --upgrade $pkg",
+    "Set-Content -Path \"$dir\\lore.cmd\" -Value \"@echo off`r`npython -m lore.cli %*\" -Encoding Ascii"
+  ],
+  "pre_uninstall": [
+    "python -m pip uninstall -y lore-book"
+  ],
+  "bin": "lore.cmd"
+}

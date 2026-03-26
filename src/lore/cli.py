@@ -81,7 +81,7 @@ def version(
                 console.print(
                     f"[bold {_A}]A new version is available:[/bold {_A}] [bold]{latest}[/bold]  "
                     f"[dim](you have {__version__})[/dim]\n"
-                    f"  [dim]Run: [bold]pip3 install --upgrade lore-book[/bold][/dim]"
+                    f"  [dim]Run: [bold]python -m pip install --upgrade lore-book[/bold][/dim]"
                 )
         except Exception:
             console.print(f"[dim]Could not reach PyPI to check for updates.[/dim]")
@@ -174,7 +174,7 @@ def _root(
                 console.print(
                     f"  [{_A}]✦  Update available:[/{_A}] [bold]{latest}[/bold]"
                     f"  [dim](you have {__version__})[/dim]\n"
-                    f"  [dim]  pip3 install --upgrade lore-book[/dim]\n"
+                    f"  [dim]  python -m pip install --upgrade lore-book[/dim]\n"
                 )
         except Exception:
             pass
@@ -2293,15 +2293,26 @@ def relic_capture(
         source_label = str(file)
 
     elif clipboard:
-        try:
-            r = subprocess.run(["pbpaste"], capture_output=True, text=True)
-            if r.returncode != 0:
-                r = subprocess.run(["xclip", "-selection", "clipboard", "-o"],
-                                   capture_output=True, text=True)
-            content = r.stdout
-            source_label = "clipboard"
-        except FileNotFoundError:
-            err_console.print("[red]Clipboard tool not found (needs pbpaste on macOS or xclip on Linux).[/red]")
+        clipboard_cmds = [
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", "Get-Clipboard -Raw"],
+            ["pwsh", "-NoProfile", "-NonInteractive", "-Command", "Get-Clipboard -Raw"],
+            ["pbpaste"],
+            ["xclip", "-selection", "clipboard", "-o"],
+        ]
+        for cmd in clipboard_cmds:
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True)
+            except FileNotFoundError:
+                continue
+            if r.returncode == 0:
+                content = r.stdout
+                source_label = "clipboard"
+                break
+        else:
+            err_console.print(
+                "[red]Clipboard tool not found. Use PowerShell Get-Clipboard (Windows), "
+                "pbpaste (macOS), or xclip (Linux).[/red]"
+            )
             raise typer.Exit(code=1)
 
     elif git_diff:

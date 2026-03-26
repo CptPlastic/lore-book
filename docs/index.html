@@ -148,10 +148,14 @@
     <!-- ══ INCANTATIONS ══ -->
     <section class="parchment">
       <h2><span class="rune">🜏</span> Incantations</h2>
+      <h3>Install on Windows (easy path)</h3>
+      <div class="incantation"><span class="comment"># Use pipx for a clean CLI install</span><br><span class="cmd">py -m pip install --user pipx</span><br><span class="cmd">py -m pipx ensurepath</span><br><span class="cmd">pipx install lore-book</span></div>
+      <h3>Install from this repo on Windows</h3>
+      <div class="incantation"><span class="cmd">powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1</span></div>
       <h3>Install via Homebrew</h3>
       <div class="incantation"><span class="comment"># Bind the tap</span><br><span class="cmd">brew tap</span> <span class="arg">cptplastic/lore-book</span><br><span class="cmd">brew install</span> <span class="arg">lore-book</span></div>
       <h3>Install via pip</h3>
-      <div class="incantation"><span class="cmd">pip install</span> <span class="arg">lore-book</span></div>
+      <div class="incantation"><span class="cmd">python -m pip install</span> <span class="arg">lore-book</span></div>
       <h3>Cast your first spells</h3>
       <div class="incantation"><span class="comment"># Record a decision</span><br><span class="cmd">lore add</span> <span class="arg">decisions</span> <span class="arg">"Use PostgreSQL — we need JSONB and row-level locking"</span><br><br><span class="comment"># Record a fact</span><br><span class="cmd">lore add</span> <span class="arg">facts</span> <span class="arg">"Auth service is the sole issuer of JWTs — never bypass it"</span><br><br><span class="comment"># Publish to all AI instruction files</span><br><span class="cmd">lore export</span></div>
     </section>

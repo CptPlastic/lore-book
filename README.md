@@ -99,6 +99,52 @@ Exports are atomic — a crash mid-write never leaves a partial file.
 pip install lore-book
 ```
 
+### Windows (recommended)
+
+Use the Python launcher so the command works consistently across Windows setups:
+
+```powershell
+py -m pip install --upgrade lore-book
+```
+
+If you prefer isolated CLI installs, `pipx` is the smoothest option on Windows:
+
+```powershell
+py -m pip install --user pipx
+py -m pipx ensurepath
+pipx install lore-book
+```
+
+If you are installing from this repository, use the bootstrap script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1
+```
+
+Optional modes:
+
+```powershell
+# Force plain pip install mode
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -Mode pip
+
+# Install from local source path via pipx
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -SourcePath .
+```
+
+### Windows package managers
+
+`pipx install lore-book` remains the easiest path for most users.
+
+This repo now generates Windows packaging artifacts during release:
+
+- Scoop manifest: `packaging/scoop/lore-book.json`
+- winget submission helper: `packaging/winget/submission-<version>.md`
+
+After each release, use these to publish:
+
+1. Submit `packaging/scoop/lore-book.json` to your Scoop bucket repository.
+2. Use `packaging/winget/submission-<version>.md` to open/update a PR in `microsoft/winget-pkgs`.
+
 For local development:
 
 ```sh
@@ -145,7 +191,7 @@ Preview locally:
 
 ```sh
 cd docs
-python3 -m http.server 8000
+python -m http.server 8000
 ```
 
 Then open:
@@ -218,7 +264,7 @@ lore relic capture --git-diff --title "Pre-deploy changes"
 # Capture the last N commits (messages + diffs)
 lore relic capture --git-log 5 --title "Sprint 12 wrap-up"
 
-# Read from clipboard (macOS: pbpaste, Linux: xclip)
+# Read from clipboard (Windows: PowerShell Get-Clipboard, macOS: pbpaste, Linux: xclip)
 lore relic capture --clipboard --title "Slack thread on rate limiting"
 
 # Pipe anything in
