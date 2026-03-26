@@ -101,6 +101,15 @@ pip install lore-book
 
 ### Windows (recommended)
 
+If you publish the Scoop bucket, this becomes the cleanest install path for Windows users:
+
+```powershell
+scoop bucket add cptplastic https://github.com/CptPlastic/scoop-lore-book
+scoop install lore-book
+```
+
+Until that bucket is live, use `pipx`:
+
 Use the Python launcher so the command works consistently across Windows setups:
 
 ```powershell
@@ -133,7 +142,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -SourcePa
 
 ### Windows package managers
 
-`pipx install lore-book` remains the easiest path for most users.
+Scoop is the intended easiest Windows package-manager path once your bucket is published.
+
+Until then, `pipx install lore-book` is the easiest path for most users.
 
 This repo now generates Windows packaging artifacts during release:
 
@@ -144,6 +155,8 @@ After each release, use these to publish:
 
 1. Submit `packaging/scoop/lore-book.json` to your Scoop bucket repository.
 2. Use `packaging/winget/submission-<version>.md` to open/update a PR in `microsoft/winget-pkgs`.
+
+A ready-to-push Scoop bucket template is included in `packaging/scoop-bucket-template/`.
 
 For local development:
 

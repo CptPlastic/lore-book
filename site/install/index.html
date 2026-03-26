@@ -566,6 +566,11 @@
 <pre><code class="language-bash">pip install lore-book
 </code></pre>
 <h2 id="windows-recommended">Windows (Recommended)<a class="headerlink" href="#windows-recommended" title="Permanent link">&para;</a></h2>
+<p>If your Scoop bucket is published, this is the cleanest Windows package-manager install:</p>
+<pre><code class="language-powershell">scoop bucket add cptplastic https://github.com/CptPlastic/scoop-lore-book
+scoop install lore-book
+</code></pre>
+<p>Until that bucket is live, use <code>pipx</code>:</p>
 <pre><code class="language-powershell">py -m pip install --user pipx
 py -m pipx ensurepath
 pipx install lore-book
