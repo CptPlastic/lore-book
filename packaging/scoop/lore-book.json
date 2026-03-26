@@ -19,12 +19,9 @@
     }
   },
   "pre_install": [
-    "$pkg = \"lore-book==1.3.0\"",
-    "python -m pip install --user --upgrade $pkg",
-    "Set-Content -Path \"$dir\\lore.cmd\" -Value \"@echo off`r`npython -m lore.cli %*\" -Encoding Ascii"
-  ],
-  "pre_uninstall": [
-    "python -m pip uninstall -y lore-book"
+    "$pkg = \"lore-book==$version\"",
+    "python -m pip install --upgrade --target \"$dir\\site\" $pkg",
+    "Set-Content -Path \"$dir\\lore.cmd\" -Value \"@echo off`r`nsetlocal`r`nset \"\"PYTHONPATH=%~dp0site;%PYTHONPATH%\"\"`r`npython -c \"\"from lore.cli import app; app()\"\" %*\" -Encoding Ascii"
   ],
   "bin": "lore.cmd"
 }
