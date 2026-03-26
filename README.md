@@ -158,6 +158,15 @@ After each release, use these to publish:
 
 A ready-to-push Scoop bucket template is included in `packaging/scoop-bucket-template/`.
 
+### Automatic Scoop bucket PRs
+
+This repository includes a workflow that can open a PR against `CptPlastic/scoop-lore-book` whenever `packaging/scoop/lore-book.json` changes:
+
+- Workflow: `.github/workflows/sync-scoop-bucket.yml`
+- Required secret: `SCOOP_BUCKET_PAT`
+
+`SCOOP_BUCKET_PAT` should have write access to `CptPlastic/scoop-lore-book` (classic `repo` scope, or fine-grained token with `contents` + `pull_requests` write).
+
 For local development:
 
 ```sh
