@@ -19,7 +19,12 @@
     }
   },
   "pre_install": [
-    "python -m pip install --upgrade --target \"$dir\\site\" \"$dir\"",
+    "$installRoot = $dir",
+    "if (-not (Test-Path (Join-Path $installRoot \"pyproject.toml\")) -and -not (Test-Path (Join-Path $installRoot \"setup.py\"))) {",
+    "  $candidate = Get-ChildItem -Path $dir -Directory | Where-Object { (Test-Path (Join-Path $_.FullName \"pyproject.toml\")) -or (Test-Path (Join-Path $_.FullName \"setup.py\")) } | Select-Object -First 1",
+    "  if ($candidate) { $installRoot = $candidate.FullName } else { throw \"Could not locate extracted Python package root in Scoop payload.\" }",
+    "}",
+    "python -m pip install --upgrade --target \"$dir\\site\" \"$installRoot\"",
     "if ($LASTEXITCODE -ne 0) { throw \"Failed to install lore-book from extracted package payload.\" }",
     "$installed = python -c \"import sys; sys.path.insert(0, r\"$dir\\site\"); import lore; print(lore.__version__)\"",
     "if ($LASTEXITCODE -ne 0) { throw \"Failed to validate installed lore-book version.\" }",
