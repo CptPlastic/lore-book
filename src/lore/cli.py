@@ -101,12 +101,14 @@ _CORE_ROWS = [
 
 _MORE_ROWS = [
     ("list",          "\\[category]",             "list memories, optionally by tome"),
+    ("lint",          "\\[--fail-on LEVELS]",      "check memory quality and metadata integrity"),
     ("remove",        "<id>",                   "delete a memory by its ID"),
     ("extract",       "\\[--last N]",             "pull memories from recent git commits"),
     ("sync",          "\\[--file PATH]",          "import shared CHRONICLE entries into .lore"),
     ("init",          "\\[path]",                 "create a .lore store in a directory"),
     ("doctor",        "",                        "check store, model, and search status"),
     ("setup",         "semantic",                "guided setup for dense vector search"),
+    ("setup",         "extract-patterns",        "manage custom extraction patterns for commits"),
     ("trust",         "refresh",                 "recompute memory trust from git signals"),
     ("trust",         "explain <id>",            "show trust score inputs for one memory"),
     ("awaken",        "\\[--background]",         "👁  watch .lore and auto-export on change"),
@@ -199,6 +201,29 @@ def _require_root() -> Path:
             f"[bold {_A}]{identity['name']}[/bold {_A}]  [dim]({identity['id']})[/dim]\n"
         )
     return root
+
+
+def _parse_id_csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    out: list[str] = []
+    for raw in value.split(","):
+        item = raw.strip()
+        if item and item not in out:
+            out.append(item)
+    return out
+
+
+def _normalize_review_date(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    from datetime import date
+
+    date.fromisoformat(cleaned)
+    return cleaned
 
 
 def _ensure_gitignore_entries(root: Path, entries: list[str]) -> list[str]:
@@ -696,6 +721,22 @@ def add(
         Optional[str],
         typer.Option("--tags", "-t", help="Comma-separated tags"),
     ] = None,
+    depends_on: Annotated[
+        Optional[str],
+        typer.Option("--depends-on", help="Comma-separated memory IDs this entry depends on"),
+    ] = None,
+    related_to: Annotated[
+        Optional[str],
+        typer.Option("--related-to", help="Comma-separated related memory IDs"),
+    ] = None,
+    deprecated: Annotated[
+        bool,
+        typer.Option("--deprecated/--not-deprecated", help="Mark this memory as deprecated"),
+    ] = False,
+    review_date: Annotated[
+        Optional[str],
+        typer.Option("--review-date", help="Optional review date in YYYY-MM-DD format"),
+    ] = None,
 ) -> None:
     """Add a new memory entry (interactive walkthrough when called with no args)."""
     from .store import add_memory, load_config
@@ -716,7 +757,7 @@ def add(
         # Step 1 — category
         cfg = load_config(root)
         valid_cats: list[str] = cfg.get("categories", [])
-        console.print(f"  [bold]Step 1 of 3  —  Category[/bold]")
+        console.print(f"  [bold]Step 1 of 5  —  Category[/bold]")
         console.print(f"  [dim]Available:[/dim] {', '.join(valid_cats)}")
         console.print(f"  [dim](type a new name to create a custom category)[/dim]")
         console.print()
@@ -727,7 +768,7 @@ def add(
         console.print()
 
         # Step 2 — content
-        console.print(f"  [bold]Step 2 of 3  —  Content[/bold]")
+        console.print(f"  [bold]Step 2 of 5  —  Content[/bold]")
         console.print(f"  [dim]Describe the decision, fact, or thing you want to remember.[/dim]")
         console.print()
         content = Prompt.ask(f"  [bold {_P}]Memory[/bold {_P}]")
@@ -737,7 +778,7 @@ def add(
         console.print()
 
         # Step 3 — tags
-        console.print(f"  [bold]Step 3 of 3  —  Tags[/bold]  [dim](optional)[/dim]")
+        console.print(f"  [bold]Step 3 of 5  —  Tags[/bold]  [dim](optional)[/dim]")
         console.print(f"  [dim]Comma-separated keywords to make this easier to find later.[/dim]")
         console.print()
         tags_input = Prompt.ask(
@@ -747,11 +788,40 @@ def add(
         tags = tags_input if tags_input.strip() else None
         console.print()
 
+        console.print(f"  [bold]Step 4 of 5  —  Relationships[/bold]  [dim](optional)[/dim]")
+        console.print(f"  [dim]Link this memory to other memory IDs if relevant.[/dim]")
+        console.print()
+        depends_on = Prompt.ask(
+            f"  [bold {_P}]Depends on[/bold {_P}] [dim](comma-separated IDs)[/dim]",
+            default="",
+        )
+        related_to = Prompt.ask(
+            f"  [bold {_P}]Related to[/bold {_P}] [dim](comma-separated IDs)[/dim]",
+            default="",
+        )
+        console.print()
+
+        console.print(f"  [bold]Step 5 of 5  —  Lifecycle[/bold]  [dim](optional)[/dim]")
+        deprecated = Confirm.ask(
+            f"  [bold {_P}]Mark as deprecated?[/bold {_P}]",
+            default=False,
+        )
+        review_date_input = Prompt.ask(
+            f"  [bold {_P}]Review date[/bold {_P}] [dim](YYYY-MM-DD, blank to skip)[/dim]",
+            default="",
+        )
+        review_date = review_date_input if review_date_input.strip() else None
+        console.print()
+
         # Confirm
         console.print(f"  [dim]───────────────────────────────[/dim]")
         console.print(f"  [bold]Category :[/bold] {category}")
         console.print(f"  [bold]Memory   :[/bold] {content}")
         console.print(f"  [bold]Tags     :[/bold] {tags or '(none)'}")
+        console.print(f"  [bold]Depends  :[/bold] {depends_on or '(none)'}")
+        console.print(f"  [bold]Related  :[/bold] {related_to or '(none)'}")
+        console.print(f"  [bold]Deprecated:[/bold] {'yes' if deprecated else 'no'}")
+        console.print(f"  [bold]Review   :[/bold] {review_date or '(none)'}")
         console.print(f"  [dim]───────────────────────────────[/dim]")
         console.print()
         confirmed = Confirm.ask(f"  [bold {_P}]Save this memory?[/bold {_P}]", default=True)
@@ -760,9 +830,26 @@ def add(
             raise typer.Exit()
         console.print()
 
-    tag_list = [t.strip() for t in tags.split(",")] if tags else []
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+    depends_list = _parse_id_csv(depends_on)
+    related_list = _parse_id_csv(related_to)
+    try:
+        normalized_review_date = _normalize_review_date(review_date)
+    except ValueError:
+        err_console.print("[red]Invalid --review-date. Use YYYY-MM-DD.[/red]")
+        raise typer.Exit(code=1)
+
     with console.status("Indexing…"):
-        entry = add_memory(root, category, content, tags=tag_list)
+        entry = add_memory(
+            root,
+            category,
+            content,
+            tags=tag_list,
+            depends_on=depends_list,
+            related_to=related_list,
+            deprecated=deprecated,
+            review_date=normalized_review_date,
+        )
         index_memory(root, entry["id"], content)
     console.print(
         f"  [bold {_P}]✓[/bold {_P}]  Saved [bold]{entry['id']}[/bold] → [bold]{category}[/bold]"
@@ -813,6 +900,126 @@ def list_cmd(
         )
     console.print(table)
     console.print(f"  [dim]Use [bold]lore edit <#>[/bold] or [bold]lore edit <id>[/bold] to modify a spell.[/dim]")
+
+
+@app.command("lint")
+def lint_cmd(
+    fail_on: Annotated[
+        Optional[str],
+        typer.Option(
+            "--fail-on",
+            help="Comma-separated severities that should cause non-zero exit (error,warning)",
+        ),
+    ] = None,
+) -> None:
+    """Check memory quality for duplicates, stale entries, and metadata integrity."""
+    from datetime import date
+
+    from .config import load_config
+    from .store import list_memories
+
+    root = _require_root()
+    cfg = load_config(root)
+    memories = list_memories(root)
+
+    if not memories:
+        console.print("[yellow]No memories found.[/yellow]")
+        return
+
+    valid_ids = {str(m.get("id", "")) for m in memories if m.get("id")}
+    seen_content: dict[tuple[str, str], str] = {}
+    findings: list[tuple[str, str, str]] = []
+
+    def report(severity: str, mem_id: str, message: str) -> None:
+        findings.append((severity, mem_id, message))
+
+    for m in memories:
+        mem_id = str(m.get("id", "?"))
+        category = str(m.get("category", "")).strip()
+        content = str(m.get("content", "")).strip()
+        norm_key = (category.lower(), " ".join(content.lower().split()))
+
+        if not content:
+            report("error", mem_id, "content is empty")
+
+        if norm_key in seen_content:
+            report("warning", mem_id, f"possible duplicate of {seen_content[norm_key]}")
+        else:
+            seen_content[norm_key] = mem_id
+
+        tags = [str(t).strip() for t in (m.get("tags") or []) if str(t).strip()]
+        if category == "instructions":
+            if not tags:
+                report("warning", mem_id, "instruction has no scope tag (expected one of tool tags)")
+            unknown_scopes = [t for t in tags if t not in _VALID_TOOLS]
+            if unknown_scopes:
+                report("error", mem_id, f"instruction has unknown scope tag(s): {', '.join(unknown_scopes)}")
+
+        for field in ("depends_on", "related_to"):
+            raw = m.get(field) or []
+            if not isinstance(raw, list):
+                report("error", mem_id, f"{field} must be a list")
+                continue
+            for ref_id in raw:
+                ref = str(ref_id).strip()
+                if not ref:
+                    continue
+                if ref == mem_id:
+                    report("warning", mem_id, f"{field} contains self-reference")
+                elif ref not in valid_ids:
+                    report("warning", mem_id, f"{field} references unknown id: {ref}")
+
+        review_date = m.get("review_date")
+        if review_date:
+            try:
+                due = date.fromisoformat(str(review_date))
+                if due < date.today():
+                    report("warning", mem_id, f"review_date has passed: {review_date}")
+            except ValueError:
+                report("error", mem_id, f"review_date is not valid ISO date: {review_date}")
+
+        deprecated = m.get("deprecated", False)
+        if not isinstance(deprecated, bool):
+            report("error", mem_id, "deprecated must be true or false")
+
+        trust_score = m.get("trust_score")
+        min_score = int(cfg.get("trust", {}).get("chronicle_min_score", 0) or 0)
+        try:
+            score_int = int(trust_score)
+            if score_int < min_score:
+                report("warning", mem_id, f"trust_score {score_int} is below chronicle_min_score {min_score}")
+        except Exception:
+            report("error", mem_id, "trust_score is not an integer")
+
+    severity_style = {
+        "error": "bold red",
+        "warning": f"bold {_A}",
+    }
+
+    if findings:
+        table = Table(show_header=True, header_style=f"bold {_A}", expand=True)
+        table.add_column("Severity", width=10, no_wrap=True)
+        table.add_column("ID", style="dim", width=10, no_wrap=True)
+        table.add_column("Issue", min_width=30, overflow="fold")
+        for severity, mem_id, message in findings:
+            label = Text(severity)
+            label.stylize(severity_style.get(severity, ""))
+            table.add_row(label, mem_id, message)
+        console.print(table)
+    else:
+        console.print(f"[bold {_P}]No lint issues found.[/bold {_P}]")
+
+    counts = {
+        "error": sum(1 for sev, _, _ in findings if sev == "error"),
+        "warning": sum(1 for sev, _, _ in findings if sev == "warning"),
+    }
+    console.print(
+        f"[dim]Lint summary:[/dim] errors={counts['error']} warnings={counts['warning']}"
+    )
+
+    fail_levels = {s.strip().lower() for s in (fail_on or "").split(",") if s.strip()}
+    if any(sev in fail_levels for sev, _, _ in findings):
+        raise typer.Exit(code=1)
 
 
 # ---------------------------------------------------------------------------
@@ -1067,12 +1274,55 @@ def edit(
     new_tags = [t.strip() for t in new_tags_input.split(",") if t.strip()]
     console.print()
 
+    current_depends = ", ".join(mem.get("depends_on", []))
+    new_depends_input = Prompt.ask(
+        f"  [bold {_P}]Depends on[/bold {_P}] [dim](comma-separated IDs)[/dim]",
+        default=current_depends,
+    )
+    new_depends = _parse_id_csv(new_depends_input)
+    console.print()
+
+    current_related = ", ".join(mem.get("related_to", []))
+    new_related_input = Prompt.ask(
+        f"  [bold {_P}]Related to[/bold {_P}] [dim](comma-separated IDs)[/dim]",
+        default=current_related,
+    )
+    new_related = _parse_id_csv(new_related_input)
+    console.print()
+
+    current_deprecated = bool(mem.get("deprecated", False))
+    new_deprecated = Confirm.ask(
+        f"  [bold {_P}]Deprecated?[/bold {_P}]",
+        default=current_deprecated,
+    )
+    console.print()
+
+    current_review = str(mem.get("review_date", "") or "")
+    new_review_input = Prompt.ask(
+        f"  [bold {_P}]Review date[/bold {_P}] [dim](YYYY-MM-DD, blank to clear)[/dim]",
+        default=current_review,
+    )
+    try:
+        new_review_date = _normalize_review_date(new_review_input)
+    except ValueError:
+        err_console.print("[red]Invalid review date. Use YYYY-MM-DD.[/red]")
+        raise typer.Exit(code=1)
+    console.print()
+
     confirmed = Confirm.ask(f"  [bold {_P}]Save changes?[/bold {_P}]", default=True)
     if not confirmed:
         console.print(f"  [dim]Cancelled — nothing was changed.[/dim]\n")
         raise typer.Exit()
 
-    updates = {"category": new_category, "content": new_content, "tags": new_tags}
+    updates = {
+        "category": new_category,
+        "content": new_content,
+        "tags": new_tags,
+        "depends_on": new_depends,
+        "related_to": new_related,
+        "deprecated": new_deprecated,
+        "review_date": new_review_date,
+    }
     with console.status("Saving…"):
         updated = update_memory(root, mem["id"], updates)
         if updated:
@@ -1640,6 +1890,168 @@ def setup_semantic(
 
 
 # ---------------------------------------------------------------------------
+# lore setup extract-patterns
+# ---------------------------------------------------------------------------
+
+@setup_app.command("extract-patterns")
+def setup_extraction_patterns() -> None:
+    """Manage custom commit message extraction patterns for auto-categorizing memories."""
+    from .config import load_config, save_config
+    from rich.prompt import Prompt, Confirm
+    from rich.table import Table
+
+    root = _require_root()
+    cfg = load_config(root)
+    patterns = cfg.get("extraction_patterns", [])
+
+    console.print()
+    console.print(Panel(
+        f"[bold {_A}]Extraction Patterns Setup[/bold {_A}]\n"
+        f"[dim]Teach lore to auto-categorize memories from your commit messages.[/dim]",
+        border_style=_BD, padding=(1, 2), style=f"on {_BG}",
+    ))
+    console.print(f"  [dim]Patterns override how lore categorizes extracted commits.[/dim]")
+    console.print()
+
+    # Show current patterns
+    if patterns:
+        console.print(f"  [bold]Current patterns ({len(patterns)}):[/bold]")
+        table = Table(show_header=True, header_style=f"bold {_A}", box=box.SIMPLE)
+        table.add_column("Name",     width=20, no_wrap=True)
+        table.add_column("Type",     width=8,  no_wrap=True)
+        table.add_column("Category", width=14, no_wrap=True)
+        table.add_column("Pattern",  min_width=30, overflow="fold")
+        table.add_column("Enabled",  width=8,  no_wrap=True)
+        for p in patterns:
+            enabled_str = "✓" if p.get("enabled", True) else "✗"
+            table.add_row(
+                p.get("name", "?"),
+                p.get("type", "?"),
+                p.get("category", "?"),
+                p.get("pattern", "?"),
+                enabled_str,
+            )
+        console.print(table)
+        console.print()
+
+    while True:
+        console.print(f"  [bold]Actions:[/bold]")
+        console.print(f"    [bold {_P}]a[/bold {_P}]  Add a new pattern")
+        console.print(f"    [bold {_P}]e[/bold {_P}]  Edit existing pattern")
+        console.print(f"    [bold {_P}]d[/bold {_P}]  Delete a pattern")
+        console.print(f"    [bold {_P}]s[/bold {_P}]  Save and exit")
+        console.print()
+        action = Prompt.ask(
+            f"  [bold {_P}]Choose[/bold {_P}]",
+            choices=["a", "e", "d", "s"],
+            default="s",
+        ).lower()
+
+        if action == "a":
+            console.print()
+            console.print(f"  [bold]Add pattern[/bold]")
+            console.print(f"  [dim]Example: DECISION: comments get categorized as 'decisions'[/dim]")
+            console.print()
+            name = Prompt.ask(f"  [bold {_P}]Name[/bold {_P}]").strip()
+            if not name:
+                console.print("[yellow]Name cannot be empty.[/yellow]\n")
+                continue
+
+            pattern_type = Prompt.ask(
+                f"  [bold {_P}]Type[/bold {_P}]",
+                choices=["regex", "prefix"],
+                default="prefix",
+            ).lower()
+            console.print(f"  [dim]Pattern is {pattern_type}. Matching is case-" +
+                         ("insensitive regex." if pattern_type == "regex" else "insensitive prefix.") + "[/dim]")
+            pattern_str = Prompt.ask(f"  [bold {_P}]Pattern[/bold {_P}]").strip()
+            if not pattern_str:
+                console.print("[yellow]Pattern cannot be empty.[/yellow]\n")
+                continue
+
+            if pattern_type == "regex":
+                try:
+                    import re
+                    re.compile(pattern_str)
+                except Exception as e:
+                    console.print(f"[yellow]Invalid regex: {e}[/yellow]\n")
+                    continue
+
+            category = Prompt.ask(
+                f"  [bold {_P}]Category[/bold {_P}]",
+                default="facts",
+            ).strip()
+
+            enabled = Confirm.ask(
+                f"  [bold {_P}]Enabled[/bold {_P}]",
+                default=True,
+            )
+
+            patterns.append({
+                "name": name,
+                "type": pattern_type,
+                "pattern": pattern_str,
+                "category": category,
+                "enabled": enabled,
+            })
+            console.print(f"\n  [bold {_P}]✓[/bold {_P}]  Pattern added.\n")
+
+        elif action == "e":
+            if not patterns:
+                console.print("[yellow]No patterns to edit.[/yellow]\n")
+                continue
+            console.print()
+            console.print(f"  [dim]Which pattern to edit?[/dim]")
+            for i, p in enumerate(patterns):
+                console.print(f"    {i+1}. {p['name']} ({p['type']})")
+            idx_str = Prompt.ask(f"  [bold {_P}]Number[/bold {_P}]").strip()
+            try:
+                idx = int(idx_str) - 1
+                if 0 <= idx < len(patterns):
+                    pat = patterns[idx]
+                    console.print()
+                    console.print(f"  [bold]Editing: {pat['name']}[/bold]")
+                    pat["name"] = Prompt.ask(f"  [bold {_P}]Name[/bold {_P}]", default=pat["name"]).strip()
+                    pat["pattern"] = Prompt.ask(f"  [bold {_P}]Pattern[/bold {_P}]", default=pat["pattern"]).strip()
+                    pat["category"] = Prompt.ask(f"  [bold {_P}]Category[/bold {_P}]", default=pat["category"]).strip()
+                    pat["enabled"] = Confirm.ask(f"  [bold {_P}]Enabled[/bold {_P}]", default=pat.get("enabled", True))
+                    console.print(f"\n  [bold {_P}]✓[/bold {_P}]  Pattern updated.\n")
+                else:
+                    console.print(f"[yellow]Invalid number.[/yellow]\n")
+            except ValueError:
+                console.print(f"[yellow]Invalid input.[/yellow]\n")
+
+        elif action == "d":
+            if not patterns:
+                console.print("[yellow]No patterns to delete.[/yellow]\n")
+                continue
+            console.print()
+            console.print(f"  [dim]Which pattern to delete?[/dim]")
+            for i, p in enumerate(patterns):
+                console.print(f"    {i+1}. {p['name']}")
+            idx_str = Prompt.ask(f"  [bold {_P}]Number[/bold {_P}]").strip()
+            try:
+                idx = int(idx_str) - 1
+                if 0 <= idx < len(patterns):
+                    pat = patterns[idx]
+                    if Confirm.ask(f"  [bold red]Delete '{pat['name']}'?[/bold red]", default=False):
+                        patterns.pop(idx)
+                        console.print(f"\n  [bold {_P}]✓[/bold {_P}]  Pattern deleted.\n")
+                else:
+                    console.print(f"[yellow]Invalid number.[/yellow]\n")
+            except ValueError:
+                console.print(f"[yellow]Invalid input.[/yellow]\n")
+
+        elif action == "s":
+            break
+
+    cfg["extraction_patterns"] = patterns
+    save_config(root, cfg)
+    console.print(f"  [bold {_P}]✓[/bold {_P}]  Saved. Run [bold]lore extract[/bold] to test patterns.")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
 # lore trust refresh
 # ---------------------------------------------------------------------------
 
@@ -1674,6 +2086,7 @@ def trust_refresh(
             score, reasons = score_memory(root, entry, cfg, author_activity_bonus=bonuses)
             level = trust_level(score)
             level_counts[level] += 1
+            now_iso = datetime.now(timezone.utc).isoformat()
 
             source = (entry.get("source") or "")
             source_commit = entry.get("source_commit")
@@ -1689,11 +2102,28 @@ def trust_refresh(
             ):
                 changed += 1
                 if not dry_run:
+                    snapshots_raw = entry.get("trust_score_snapshots") or []
+                    snapshots: list[dict[str, object]] = []
+                    if isinstance(snapshots_raw, list):
+                        for item in snapshots_raw:
+                            if isinstance(item, dict):
+                                snapshots.append(item)
+                    snapshots.append(
+                        {
+                            "updated_at": now_iso,
+                            "score": score,
+                            "level": level,
+                            "reasons": reasons,
+                        }
+                    )
+                    snapshots = snapshots[-25:]
+
                     updates: dict[str, object] = {
                         "trust_score": score,
                         "trust_level": level,
                         "trust_reasons": reasons,
-                        "trust_updated_at": datetime.now(timezone.utc).isoformat(),
+                        "trust_updated_at": now_iso,
+                        "trust_score_snapshots": snapshots,
                     }
                     if source_commit:
                         updates["source_commit"] = source_commit
@@ -1777,6 +2207,17 @@ def trust_explain(
         console.print("\n[bold]Reasons[/bold]")
         for reason in live_reasons:
             console.print(f"- {reason}")
+
+    snapshots = entry.get("trust_score_snapshots") or []
+    if isinstance(snapshots, list) and snapshots:
+        console.print("\n[bold]History[/bold]")
+        for snap in snapshots[-5:]:
+            if not isinstance(snap, dict):
+                continue
+            when = snap.get("updated_at", "?")
+            score = snap.get("score", "?")
+            level = snap.get("level", "?")
+            console.print(f"- {when}: {level} {score}")
 
     source = entry.get("source")
     author = entry.get("git_author")
