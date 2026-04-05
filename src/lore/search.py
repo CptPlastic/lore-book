@@ -289,3 +289,82 @@ def search(root: Path, query: str, top_k: int = 5) -> list[dict[str, Any]]:
             mem["_score"] = round(score, 4)
             results.append(mem)
     return results
+
+
+def _association_source(
+    root: Path,
+    mem_id: str | None,
+    content: str | None,
+    tags: list[str] | None,
+    category: str | None,
+) -> tuple[str, list[str], str]:
+    if not mem_id:
+        return (content or "").strip(), [str(t).strip() for t in (tags or []) if str(t).strip()], (category or "").strip()
+
+    source = next((m for m in list_memories(root) if str(m.get("id", "")) == mem_id), None)
+    if source is None:
+        return "", [], ""
+    return (
+        str(source.get("content", "")).strip(),
+        [str(t).strip() for t in (source.get("tags") or []) if str(t).strip()],
+        str(source.get("category", "")).strip(),
+    )
+
+
+def _association_bonus(tags: list[str], category: str, hit: dict[str, Any]) -> tuple[float, list[str]]:
+    hit_tags = {str(t).strip() for t in (hit.get("tags") or []) if str(t).strip()}
+    shared_tags = sorted(set(tags) & hit_tags)
+    bonus = min(len(shared_tags), 3) * 0.06
+    if category and str(hit.get("category", "")).strip() == category:
+        bonus += 0.04
+    return bonus, shared_tags
+
+
+def suggest_associations(
+    root: Path,
+    *,
+    mem_id: str | None = None,
+    content: str | None = None,
+    tags: list[str] | None = None,
+    category: str | None = None,
+    top_k: int = 5,
+    min_score: float = 0.35,
+) -> list[dict[str, Any]]:
+    """Suggest related memories using semantic similarity plus light heuristics.
+
+    The returned entries include:
+    - ``_score``: combined association score
+    - ``_semantic_score``: raw semantic similarity score
+    - ``_shared_tags``: overlapping tags
+    """
+    if not list_memories(root):
+        return []
+
+    content, tags, category = _association_source(root, mem_id, content, tags, category)
+    if not content:
+        return []
+
+    candidate_pool = max(top_k * 4, 12)
+    semantic_hits = search(root, content, top_k=candidate_pool)
+
+    suggestions: list[dict[str, Any]] = []
+    for hit in semantic_hits:
+        hit_id = str(hit.get("id", "")).strip()
+        if not hit_id or (mem_id and hit_id == mem_id):
+            continue
+
+        semantic_score = float(hit.get("_score", 0.0))
+        bonus, shared_tags = _association_bonus(tags, category, hit)
+
+        combined_score = round(semantic_score + bonus, 4)
+        if combined_score < min_score:
+            continue
+
+        enriched = dict(hit)
+        enriched["_semantic_score"] = round(semantic_score, 4)
+        enriched["_shared_tags"] = shared_tags
+        enriched["_score"] = combined_score
+        suggestions.append(enriched)
+
+    suggestions.sort(key=lambda item: (float(item.get("_score", 0.0)), float(item.get("_semantic_score", 0.0))), reverse=True)
+    return suggestions[:top_k]

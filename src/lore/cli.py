@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 import typer
 from rich.console import Console
@@ -102,6 +102,7 @@ _CORE_ROWS = [
 _MORE_ROWS = [
     ("list",          "\\[category]",             "list memories, optionally by tome"),
     ("lint",          "\\[--fail-on LEVELS]",      "check memory quality and metadata integrity"),
+    ("associate",     "<id>",                   "suggest or apply related memory links"),
     ("remove",        "<id>",                   "delete a memory by its ID"),
     ("extract",       "\\[--last N]",             "pull memories from recent git commits"),
     ("sync",          "\\[--file PATH]",          "import shared CHRONICLE entries into .lore"),
@@ -224,6 +225,193 @@ def _normalize_review_date(value: str | None) -> str | None:
 
     date.fromisoformat(cleaned)
     return cleaned
+
+
+def _resolve_memory_ref(memories: list[dict[str, Any]], ref: str) -> dict[str, Any] | None:
+    if ref.isdigit():
+        idx = int(ref) - 1
+        if 0 <= idx < len(memories):
+            return memories[idx]
+        return None
+
+    matches = [m for m in memories if str(m.get("id", "")).startswith(ref)]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(f"Ambiguous ID prefix '{ref}' — matches {len(matches)} spells. Use more characters.")
+    return None
+
+
+def _print_association_table(suggestions: list[dict[str, Any]]) -> None:
+    def _preview(text: str, limit: int = 96) -> str:
+        compact = " ".join(text.split())
+        return compact if len(compact) <= limit else compact[: limit - 1].rstrip() + "…"
+
+    table = Table(show_header=True, header_style=f"bold {_A}", expand=True)
+    table.add_column("Score", width=7, no_wrap=True)
+    table.add_column("Semantic", width=9, no_wrap=True)
+    table.add_column("ID", style="dim", width=10, no_wrap=True)
+    table.add_column("Category", width=14, no_wrap=True)
+    table.add_column("Shared Tags", width=18, no_wrap=True)
+    table.add_column("Content", min_width=20, overflow="fold")
+    for item in suggestions:
+        table.add_row(
+            f"{float(item.get('_score', 0.0)):.3f}",
+            f"{float(item.get('_semantic_score', 0.0)):.3f}",
+            str(item.get("id", "")),
+            str(item.get("category", "")),
+            ", ".join(item.get("_shared_tags", [])) or "-",
+            _preview(str(item.get("content", ""))),
+        )
+    console.print(table)
+
+
+def _apply_related_links(root: Path, source_id: str, target_ids: list[str]) -> int:
+    from .store import list_memories, update_memory
+
+    memories = list_memories(root)
+    id_map = {str(m.get("id", "")): m for m in memories if m.get("id")}
+    source = id_map.get(source_id)
+    if source is None:
+        return 0
+
+    current_source = [str(v).strip() for v in (source.get("related_to") or []) if str(v).strip()]
+    updated_source = current_source[:]
+    applied = 0
+
+    for target_id in target_ids:
+        tid = str(target_id).strip()
+        if not tid or tid == source_id or tid not in id_map:
+            continue
+        if tid not in updated_source:
+            updated_source.append(tid)
+            applied += 1
+
+        target = id_map[tid]
+        target_related = [str(v).strip() for v in (target.get("related_to") or []) if str(v).strip()]
+        if source_id not in target_related:
+            target_related.append(source_id)
+            update_memory(root, tid, {"related_to": target_related})
+
+    if updated_source != current_source:
+        update_memory(root, source_id, {"related_to": updated_source})
+    return applied
+
+
+def _interactive_add_inputs(root: Path) -> tuple[str, str, str | None, str | None, str | None, bool, str | None]:
+    from .config import load_config
+    from rich.prompt import Prompt, Confirm
+
+    cfg = load_config(root)
+    valid_cats: list[str] = cfg.get("categories", [])
+
+    console.print()
+    console.print(Panel(
+        f"[bold {_A}]New memory — let's walk through it step by step.[/bold {_A}]",
+        border_style=_BD, padding=(0, 2), style=f"on {_BG}",
+    ))
+    console.print()
+
+    console.print("  [bold]Step 1 of 5  —  Category[/bold]")
+    console.print(f"  [dim]Available:[/dim] {', '.join(valid_cats)}")
+    console.print("  [dim](type a new name to create a custom category)[/dim]")
+    console.print()
+    category = Prompt.ask(
+        f"  [bold {_P}]Category[/bold {_P}]",
+        default=valid_cats[0] if valid_cats else "facts",
+    )
+    console.print()
+
+    console.print("  [bold]Step 2 of 5  —  Content[/bold]")
+    console.print("  [dim]Describe the decision, fact, or thing you want to remember.[/dim]")
+    console.print()
+    content = Prompt.ask(f"  [bold {_P}]Memory[/bold {_P}]")
+    while not content.strip():
+        console.print("  [bold red]Content cannot be empty.[/bold red]")
+        content = Prompt.ask(f"  [bold {_P}]Memory[/bold {_P}]")
+    console.print()
+
+    console.print("  [bold]Step 3 of 5  —  Tags[/bold]  [dim](optional)[/dim]")
+    console.print("  [dim]Comma-separated keywords to make this easier to find later.[/dim]")
+    console.print()
+    tags_input = Prompt.ask(f"  [bold {_P}]Tags[/bold {_P}]", default="")
+    tags = tags_input if tags_input.strip() else None
+    console.print()
+
+    console.print("  [bold]Step 4 of 5  —  Relationships[/bold]  [dim](optional)[/dim]")
+    console.print("  [dim]Link this memory to other memory IDs if relevant.[/dim]")
+    console.print()
+    depends_on = Prompt.ask(
+        f"  [bold {_P}]Depends on[/bold {_P}] [dim](comma-separated IDs)[/dim]",
+        default="",
+    )
+    related_to = Prompt.ask(
+        f"  [bold {_P}]Related to[/bold {_P}] [dim](comma-separated IDs)[/dim]",
+        default="",
+    )
+    console.print()
+
+    console.print("  [bold]Step 5 of 5  —  Lifecycle[/bold]  [dim](optional)[/dim]")
+    deprecated = Confirm.ask(f"  [bold {_P}]Mark as deprecated?[/bold {_P}]", default=False)
+    review_date_input = Prompt.ask(
+        f"  [bold {_P}]Review date[/bold {_P}] [dim](YYYY-MM-DD, blank to skip)[/dim]",
+        default="",
+    )
+    review_date = review_date_input if review_date_input.strip() else None
+    console.print()
+
+    console.print("  [dim]───────────────────────────────[/dim]")
+    console.print(f"  [bold]Category :[/bold] {category}")
+    console.print(f"  [bold]Memory   :[/bold] {content}")
+    console.print(f"  [bold]Tags     :[/bold] {tags or '(none)'}")
+    console.print(f"  [bold]Depends  :[/bold] {depends_on or '(none)'}")
+    console.print(f"  [bold]Related  :[/bold] {related_to or '(none)'}")
+    console.print(f"  [bold]Deprecated:[/bold] {'yes' if deprecated else 'no'}")
+    console.print(f"  [bold]Review   :[/bold] {review_date or '(none)'}")
+    console.print("  [dim]───────────────────────────────[/dim]")
+    console.print()
+    confirmed = Confirm.ask(f"  [bold {_P}]Save this memory?[/bold {_P}]", default=True)
+    if not confirmed:
+        console.print("\n  [dim]Cancelled — nothing was saved.[/dim]\n")
+        raise typer.Exit()
+    console.print()
+    return category, content, tags, depends_on, related_to, deprecated, review_date
+
+
+def _auto_associate_entry(
+    root: Path,
+    entry: dict[str, Any],
+    *,
+    interactive_mode: bool,
+    associate_top: int,
+    associate_min_score: float,
+) -> None:
+    from rich.prompt import Confirm
+    from .search import suggest_associations
+
+    suggestions = suggest_associations(
+        root,
+        mem_id=entry["id"],
+        top_k=max(1, associate_top),
+        min_score=max(0.0, min(1.0, associate_min_score)),
+    )
+    if not suggestions:
+        console.print("  [dim]No strong related-memory suggestions found.[/dim]")
+        return
+
+    console.print()
+    console.print(f"  [bold {_A}]Suggested associations[/bold {_A}] for [bold]{entry['id']}[/bold]")
+    _print_association_table(suggestions)
+    should_apply = True
+    if interactive_mode:
+        console.print()
+        should_apply = Confirm.ask(
+            f"  [bold {_P}]Apply these related links?[/bold {_P}]",
+            default=True,
+        )
+    if should_apply:
+        applied = _apply_related_links(root, entry["id"], [str(s.get("id", "")) for s in suggestions])
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  Linked [bold]{applied}[/bold] related memories")
 
 
 def _ensure_gitignore_entries(root: Path, entries: list[str]) -> list[str]:
@@ -737,98 +925,29 @@ def add(
         Optional[str],
         typer.Option("--review-date", help="Optional review date in YYYY-MM-DD format"),
     ] = None,
+    auto_associate: Annotated[
+        bool,
+        typer.Option("--auto-associate", help="Suggest and attach related memories automatically"),
+    ] = False,
+    associate_top: Annotated[
+        int,
+        typer.Option("--associate-top", help="Maximum number of related memories to attach"),
+    ] = 3,
+    associate_min_score: Annotated[
+        float,
+        typer.Option("--associate-min-score", help="Minimum association score to accept"),
+    ] = 0.35,
 ) -> None:
     """Add a new memory entry (interactive walkthrough when called with no args)."""
-    from .store import add_memory, load_config
+    from .store import add_memory
     from .search import index_memory
-    from rich.prompt import Prompt, Confirm
 
     root = _require_root()
 
-    if category is None and content is None:
-        # ── Interactive walkthrough ─────────────────────────────────────────
-        console.print()
-        console.print(Panel(
-            f"[bold {_A}]New memory — let's walk through it step by step.[/bold {_A}]",
-            border_style=_BD, padding=(0, 2), style=f"on {_BG}",
-        ))
-        console.print()
+    interactive_mode = category is None and content is None
 
-        # Step 1 — category
-        cfg = load_config(root)
-        valid_cats: list[str] = cfg.get("categories", [])
-        console.print(f"  [bold]Step 1 of 5  —  Category[/bold]")
-        console.print(f"  [dim]Available:[/dim] {', '.join(valid_cats)}")
-        console.print(f"  [dim](type a new name to create a custom category)[/dim]")
-        console.print()
-        category = Prompt.ask(
-            f"  [bold {_P}]Category[/bold {_P}]",
-            default=valid_cats[0] if valid_cats else "facts",
-        )
-        console.print()
-
-        # Step 2 — content
-        console.print(f"  [bold]Step 2 of 5  —  Content[/bold]")
-        console.print(f"  [dim]Describe the decision, fact, or thing you want to remember.[/dim]")
-        console.print()
-        content = Prompt.ask(f"  [bold {_P}]Memory[/bold {_P}]")
-        while not content.strip():
-            console.print(f"  [bold red]Content cannot be empty.[/bold red]")
-            content = Prompt.ask(f"  [bold {_P}]Memory[/bold {_P}]")
-        console.print()
-
-        # Step 3 — tags
-        console.print(f"  [bold]Step 3 of 5  —  Tags[/bold]  [dim](optional)[/dim]")
-        console.print(f"  [dim]Comma-separated keywords to make this easier to find later.[/dim]")
-        console.print()
-        tags_input = Prompt.ask(
-            f"  [bold {_P}]Tags[/bold {_P}]",
-            default="",
-        )
-        tags = tags_input if tags_input.strip() else None
-        console.print()
-
-        console.print(f"  [bold]Step 4 of 5  —  Relationships[/bold]  [dim](optional)[/dim]")
-        console.print(f"  [dim]Link this memory to other memory IDs if relevant.[/dim]")
-        console.print()
-        depends_on = Prompt.ask(
-            f"  [bold {_P}]Depends on[/bold {_P}] [dim](comma-separated IDs)[/dim]",
-            default="",
-        )
-        related_to = Prompt.ask(
-            f"  [bold {_P}]Related to[/bold {_P}] [dim](comma-separated IDs)[/dim]",
-            default="",
-        )
-        console.print()
-
-        console.print(f"  [bold]Step 5 of 5  —  Lifecycle[/bold]  [dim](optional)[/dim]")
-        deprecated = Confirm.ask(
-            f"  [bold {_P}]Mark as deprecated?[/bold {_P}]",
-            default=False,
-        )
-        review_date_input = Prompt.ask(
-            f"  [bold {_P}]Review date[/bold {_P}] [dim](YYYY-MM-DD, blank to skip)[/dim]",
-            default="",
-        )
-        review_date = review_date_input if review_date_input.strip() else None
-        console.print()
-
-        # Confirm
-        console.print(f"  [dim]───────────────────────────────[/dim]")
-        console.print(f"  [bold]Category :[/bold] {category}")
-        console.print(f"  [bold]Memory   :[/bold] {content}")
-        console.print(f"  [bold]Tags     :[/bold] {tags or '(none)'}")
-        console.print(f"  [bold]Depends  :[/bold] {depends_on or '(none)'}")
-        console.print(f"  [bold]Related  :[/bold] {related_to or '(none)'}")
-        console.print(f"  [bold]Deprecated:[/bold] {'yes' if deprecated else 'no'}")
-        console.print(f"  [bold]Review   :[/bold] {review_date or '(none)'}")
-        console.print(f"  [dim]───────────────────────────────[/dim]")
-        console.print()
-        confirmed = Confirm.ask(f"  [bold {_P}]Save this memory?[/bold {_P}]", default=True)
-        if not confirmed:
-            console.print(f"\n  [dim]Cancelled — nothing was saved.[/dim]\n")
-            raise typer.Exit()
-        console.print()
+    if interactive_mode:
+        category, content, tags, depends_on, related_to, deprecated, review_date = _interactive_add_inputs(root)
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     depends_list = _parse_id_csv(depends_on)
@@ -851,6 +970,15 @@ def add(
             review_date=normalized_review_date,
         )
         index_memory(root, entry["id"], content)
+
+    if auto_associate:
+        _auto_associate_entry(
+            root,
+            entry,
+            interactive_mode=interactive_mode,
+            associate_top=associate_top,
+            associate_min_score=associate_min_score,
+        )
     console.print(
         f"  [bold {_P}]✓[/bold {_P}]  Saved [bold]{entry['id']}[/bold] → [bold]{category}[/bold]"
     )
@@ -1059,6 +1187,68 @@ def search(
             r.get("content", ""),
         )
     console.print(table)
+
+
+@app.command()
+def associate(
+    ref: Annotated[
+        str,
+        typer.Argument(help="Row number from `lore list` or memory ID prefix"),
+    ],
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Write the suggested associations into related_to on both memories"),
+    ] = False,
+    top: Annotated[
+        int,
+        typer.Option("--top", "-k", help="Number of suggestions to show"),
+    ] = 5,
+    min_score: Annotated[
+        float,
+        typer.Option("--min-score", help="Minimum association score to include"),
+    ] = 0.35,
+) -> None:
+    """Suggest related memories for an existing entry, optionally applying them."""
+    from .export import export_all
+    from .search import suggest_associations
+    from .store import list_memories
+
+    root = _require_root()
+    memories = list_memories(root)
+    if not memories:
+        console.print("[yellow]No memories found.[/yellow]")
+        return
+
+    try:
+        mem = _resolve_memory_ref(memories, ref.strip())
+    except ValueError as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+
+    if mem is None:
+        err_console.print(f"[red]No spell found matching '{ref}'.[/red]")
+        raise typer.Exit(code=1)
+
+    with console.status("Finding associations…"):
+        suggestions = suggest_associations(
+            root,
+            mem_id=str(mem.get("id", "")),
+            top_k=max(1, top),
+            min_score=max(0.0, min(1.0, min_score)),
+        )
+
+    if not suggestions:
+        console.print(f"[yellow]No related memory suggestions found for[/yellow] [bold]{mem.get('id', '')}[/bold].")
+        return
+
+    console.print(f"[bold {_A}]Association suggestions[/bold {_A}] for [bold]{mem.get('id', '')}[/bold]")
+    _print_association_table(suggestions)
+
+    if apply:
+        applied = _apply_related_links(root, str(mem.get("id", "")), [str(s.get("id", "")) for s in suggestions])
+        with console.status("Updating chronicle…"):
+            export_all(root)
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  Applied [bold]{applied}[/bold] related links and updated the chronicle")
 
 
 # ---------------------------------------------------------------------------
