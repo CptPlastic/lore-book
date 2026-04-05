@@ -1,13 +1,13 @@
 {
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "The spellbook for your codebase - chronicle decisions, context, and lessons your AI tools can read.",
   "homepage": "https://github.com/CptPlastic/lore-book",
   "license": "FSL-1.1-MIT",
   "depends": "python",
   "architecture": {
     "64bit": {
-      "url": "https://files.pythonhosted.org/packages/source/l/lore_book/lore_book-1.4.1.tar.gz",
-      "hash": "ee6dfacd5c67f5e0845558e0a9c279686cac91c096649ec71c922c8161503dc3"
+      "url": "https://files.pythonhosted.org/packages/source/l/lore_book/lore_book-1.4.2.tar.gz",
+      "hash": "da2fd1f5c1ddfae460fe33491977a2b313f1d7684a27cb7afe372e6e260fa8b0"
     }
   },
   "checkver": "https://pypi.org/pypi/lore-book/json",
@@ -21,7 +21,7 @@
   "pre_install": [
     "python -m pip install --upgrade --target \"$dir\\site\" \"$dir\"",
     "if ($LASTEXITCODE -ne 0) { throw \"Failed to install lore-book from extracted package payload.\" }",
-    "$installed = python -c \"import sys; sys.path.insert(0, r\"\"$dir\\site\"\"); import lore; print(lore.__version__)\"",
+    "$installed = python -c \"import sys; sys.path.insert(0, r\"$dir\\site\"); import lore; print(lore.__version__)\"",
     "if ($LASTEXITCODE -ne 0) { throw \"Failed to validate installed lore-book version.\" }",
     "if ($installed.Trim() -ne $version) { throw \"Installed lore-book version does not match manifest version.\" }",
     "Set-Content -Path \"$dir\\lore.cmd\" -Value \"@echo off`r`nsetlocal`r`nset \"\"PYTHONPATH=%~dp0site;%PYTHONPATH%\"\"`r`npython -c \"\"from lore.cli import app; app()\"\" %*\" -Encoding Ascii"

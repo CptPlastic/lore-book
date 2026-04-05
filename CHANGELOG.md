@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.4.2 - 2026-04-05
+
+### Features
+- add memory association flow to TUI and onboarding/docs guidance
+- auto-link related memories via semantic suggestions
+
+### Fixes
+- publish exact built artifacts and avoid duplicate PyPI builds
+- install from local payload and fail on version mismatch
+
 ## v1.4.1 - 2026-04-05
 
 ### Features
