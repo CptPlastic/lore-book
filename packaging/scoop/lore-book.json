@@ -19,8 +19,11 @@
     }
   },
   "pre_install": [
-    "$pkg = \"lore-book==$version\"",
-    "python -m pip install --upgrade --target \"$dir\\site\" $pkg",
+    "python -m pip install --upgrade --target \"$dir\\site\" \"$dir\"",
+    "if ($LASTEXITCODE -ne 0) { throw \"Failed to install lore-book from extracted package payload.\" }",
+    "$installed = python -c \"import sys; sys.path.insert(0, r\"\"$dir\\site\"\"); import lore; print(lore.__version__)\"",
+    "if ($LASTEXITCODE -ne 0) { throw \"Failed to validate installed lore-book version.\" }",
+    "if ($installed.Trim() -ne $version) { throw \"Installed lore-book version does not match manifest version.\" }",
     "Set-Content -Path \"$dir\\lore.cmd\" -Value \"@echo off`r`nsetlocal`r`nset \"\"PYTHONPATH=%~dp0site;%PYTHONPATH%\"\"`r`npython -c \"\"from lore.cli import app; app()\"\" %*\" -Encoding Ascii"
   ],
   "bin": "lore.cmd"
