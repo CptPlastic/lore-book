@@ -269,6 +269,91 @@ Spell IDs are short UUID prefixes. `lore list` shows them.
 
 ---
 
+## New in v1.4.0 - context keeper features
+
+The 1.4.0 release adds relationship metadata, linting, trust history, and configurable extraction patterns.
+
+### 1) Add metadata to spells
+
+You can link memories together, mark deprecations, and set review dates.
+
+```sh
+# Interactive (includes metadata steps)
+lore add
+
+# Scriptable form
+lore add decisions "Use OAuth device flow for CLI auth" \
+  --depends-on 02e0914c,6c8887fe \
+  --related-to e07d12be \
+  --review-date 2026-06-01
+
+# Mark a memory as deprecated later
+lore edit e07d12be
+```
+
+Metadata fields:
+- `depends_on` - memory IDs this entry relies on
+- `related_to` - memory IDs that are contextually related
+- `deprecated` - lifecycle flag for old guidance
+- `review_date` - date to revisit stale decisions
+
+### 2) Run memory quality checks with lore lint
+
+```sh
+# Show findings only
+lore lint
+
+# Fail CI on errors
+lore lint --fail-on error
+
+# Fail CI on errors and warnings
+lore lint --fail-on error,warning
+```
+
+`lore lint` checks:
+- empty memory content
+- likely duplicates
+- invalid instruction scope tags
+- broken relationship references
+- invalid or past review dates
+- invalid deprecated flag types
+- trust score threshold warnings
+
+### 3) Track trust changes over time
+
+```sh
+# Recompute trust from git signals
+lore trust refresh
+
+# Explain one memory's trust and see recent history
+lore trust explain e07d12be
+```
+
+Each refresh writes rolling trust snapshots (score, level, reasons, timestamp) so score changes are auditable.
+
+### 4) Teach extraction your commit conventions
+
+Use the new interactive pattern manager:
+
+```sh
+lore setup extract-patterns
+```
+
+This lets you add regex or prefix rules that auto-categorize commit-derived memories during extraction.
+
+Then extract as usual:
+
+```sh
+lore extract --last 20 --auto
+```
+
+Example conventions:
+- `chore(release):` -> `decisions`
+- `docs:` -> `summaries`
+- `fix:` -> `facts`
+
+---
+
 ## Relics — capture now, curate later
 
 Use relics when you want to preserve raw information without slowing down to decide what matters.
