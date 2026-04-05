@@ -3,6 +3,18 @@
 ## v1.4.1 - 2026-04-05
 
 ### Features
+- surface memory dependencies in detail view and add global dependency map
+
+### Fixes
+- correct lore-book 1.4.0 sdist hash
+
+### Other
+- Add 1.4.0 Context Keeper docs
+- v1.4.1 - TUI dependency visualization
+
+## v1.4.1 - 2026-04-05
+
+### Features
 - TUI enhancements — surface memory dependencies in detail view and add global dependency map
 	- DetailScreen now displays DEPENDS, RELATED, USED BY, REVIEW, DEPRECATED fields
 	- New DependencyMapScreen (accessed via 'g' key) shows all depends_on edges at a glance
