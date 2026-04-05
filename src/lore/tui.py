@@ -104,12 +104,54 @@ class DetailScreen(ModalScreen):
     #hint {{ color: {_PHOSPHOR_M}; text-align: center; margin-top: 1; }}
     """
 
-    def __init__(self, memory: dict) -> None:
+    def __init__(self, memory: dict, all_memories: list[dict]) -> None:
         super().__init__()
         self._memory = memory
+        self._all_memories = all_memories
+
+    def _fmt_refs(self, refs: list[str]) -> str:
+        if not refs:
+            return "-"
+        id_map = {
+            str(m.get("id", "")): m
+            for m in self._all_memories
+            if m.get("id")
+        }
+        out: list[str] = []
+        for ref in refs:
+            rid = str(ref).strip()
+            if not rid:
+                continue
+            target = id_map.get(rid)
+            if not target:
+                out.append(f"{rid} (?)")
+                continue
+            cat = str(target.get("category", "?"))
+            out.append(f"{rid} ({cat})")
+        return ", ".join(out) if out else "-"
+
+    def _used_by(self, mem_id: str) -> list[str]:
+        users: list[str] = []
+        for m in self._all_memories:
+            rid = str(m.get("id", "")).strip()
+            if not rid or rid == mem_id:
+                continue
+            raw = m.get("depends_on") or []
+            if not isinstance(raw, list):
+                continue
+            if any(str(v).strip() == mem_id for v in raw):
+                users.append(rid)
+        return users
 
     def compose(self) -> ComposeResult:
         m = self._memory
+        depends_raw = m.get("depends_on") or []
+        related_raw = m.get("related_to") or []
+        depends = [str(v).strip() for v in depends_raw if str(v).strip()] if isinstance(depends_raw, list) else []
+        related = [str(v).strip() for v in related_raw if str(v).strip()] if isinstance(related_raw, list) else []
+        used_by = self._used_by(str(m.get("id", "")))
+        review_date = str(m.get("review_date", "") or "-")
+        deprecated = "yes" if bool(m.get("deprecated", False)) else "no"
         with Vertical(id="dialog"):
             yield Label(f"◈  {m.get('id', '')}  ◈", id="dialog-title", markup=False)
             yield Static(_escape(m.get("content", "")), id="content-box")
@@ -131,6 +173,96 @@ class DetailScreen(ModalScreen):
             with Horizontal(classes="meta-row"):
                 yield Label("CREATED", classes="meta-key")
                 yield Label(m.get("created_at", "")[:19], classes="meta-val", markup=False)
+            with Horizontal(classes="meta-row"):
+                yield Label("DEPENDS", classes="meta-key")
+                yield Label(self._fmt_refs(depends), classes="meta-val", markup=False)
+            with Horizontal(classes="meta-row"):
+                yield Label("RELATED", classes="meta-key")
+                yield Label(self._fmt_refs(related), classes="meta-val", markup=False)
+            with Horizontal(classes="meta-row"):
+                yield Label("USED BY", classes="meta-key")
+                yield Label(self._fmt_refs(used_by), classes="meta-val", markup=False)
+            with Horizontal(classes="meta-row"):
+                yield Label("REVIEW", classes="meta-key")
+                yield Label(review_date, classes="meta-val", markup=False)
+            with Horizontal(classes="meta-row"):
+                yield Label("DEPRECATED", classes="meta-key")
+                yield Label(deprecated, classes="meta-val", markup=False)
+            yield Label("[ ENTER · SPACE · ESC to close ]", id="hint", markup=False)
+
+
+class DependencyMapScreen(ModalScreen):
+    """Global dependency map to quickly inspect memory relationships."""
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close", show=False),
+        Binding("enter", "dismiss", "Close", show=False),
+        Binding("space", "dismiss", "Close", show=False),
+    ]
+
+    CSS = f"""
+    DependencyMapScreen {{ align: center middle; }}
+    #dialog {{
+        width: 110; height: 30;
+        border: solid {_BORDER}; background: {_BG}; padding: 1 2;
+    }}
+    #dialog-title {{
+        color: {_AMBER}; text-style: bold; text-align: center;
+        width: 1fr; margin-bottom: 1;
+    }}
+    #map-box {{
+        background: {_SURFACE}; color: {_PHOSPHOR_H};
+        border: solid {_BORDER}; padding: 0 1;
+        height: 1fr;
+    }}
+    #hint {{ color: {_PHOSPHOR_M}; text-align: center; margin-top: 1; }}
+    """
+
+    def __init__(self, memories: list[dict]) -> None:
+        super().__init__()
+        self._memories = memories
+
+    def _render_map(self) -> str:
+        id_map = {
+            str(m.get("id", "")): m
+            for m in self._memories
+            if m.get("id")
+        }
+        lines: list[str] = [
+            "depends_on edges",
+            "----------------",
+        ]
+        edge_count = 0
+        for m in sorted(self._memories, key=lambda x: str(x.get("id", ""))):
+            mid = str(m.get("id", "")).strip()
+            if not mid:
+                continue
+            raw = m.get("depends_on") or []
+            refs = [str(v).strip() for v in raw if str(v).strip()] if isinstance(raw, list) else []
+            if not refs:
+                continue
+            edge_count += len(refs)
+            cat = str(m.get("category", "?"))
+            resolved: list[str] = []
+            for rid in refs:
+                target = id_map.get(rid)
+                tcat = str(target.get("category", "?")) if target else "?"
+                resolved.append(f"{rid}({tcat})")
+            lines.append(f"{mid}({cat}) -> {', '.join(resolved)}")
+
+        if edge_count == 0:
+            lines.append("(no dependency relationships found)")
+
+        lines += [
+            "",
+            "Tip: open a memory with ENTER to see DEPENDS / RELATED / USED BY.",
+        ]
+        return "\n".join(lines)
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label("◈  DEPENDENCY MAP  ◈", id="dialog-title", markup=False)
+            yield Static(self._render_map(), id="map-box", markup=False)
             yield Label("[ ENTER · SPACE · ESC to close ]", id="hint", markup=False)
 
 
@@ -533,6 +665,7 @@ class LoreApp(App):
         Binding("a",      "add_memory",    "Add"),
         Binding("u",      "edit_memory",   "Edit"),
         Binding("d",      "delete_memory", "Delete"),
+        Binding("g",      "dependency_map", "Deps"),
         Binding("e",      "export_all",    "Export"),
         Binding("r",      "refresh",       "Refresh"),
         Binding("/",      "focus_search",  "Search"),
@@ -751,7 +884,10 @@ class LoreApp(App):
             return
         memory = next((m for m in self._all_memories if m.get("id") == mem_id), None)
         if memory:
-            self.push_screen(DetailScreen(memory))
+            self.push_screen(DetailScreen(memory, self._all_memories))
+
+    def action_dependency_map(self) -> None:
+        self.push_screen(DependencyMapScreen(self._all_memories))
 
     # ------------------------------------------------------------------
     # Edit memory  (u key)
