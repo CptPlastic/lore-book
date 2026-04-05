@@ -246,10 +246,17 @@ Onboard/Init also add local adapter files to `.gitignore` by default, so only sh
 # Interactive, step-by-step
 lore add
 
+# Save and auto-link related spells
+lore add decisions "Use FastAPI — async support + automatic OpenAPI docs" --tags api,backend --auto-associate
+
 # One-liner (scriptable, CI-friendly)
 lore add decisions "Use FastAPI — async support + automatic OpenAPI docs"
 lore add preferences "Always use type hints" --tags style,python
 lore add facts "Minimum supported Python is 3.10"
+
+# Suggest or apply related links for an existing spell
+lore associate <id>
+lore associate <id> --apply
 
 # Semantic search — finds conceptually related spells, not just keyword matches
 lore search "why did we choose FastAPI"
@@ -266,6 +273,31 @@ lore remove <id>
 ```
 
 Spell IDs are short UUID prefixes. `lore list` shows them.
+
+---
+
+## New in v1.4.1 - auto association
+
+Lore can now suggest relationship links between spells automatically.
+
+```sh
+# During add
+lore add facts "Scoop installer uses local extracted payload" --tags windows,scoop --auto-associate
+
+# Tune association behavior
+lore add decisions "..." --auto-associate --associate-top 5 --associate-min-score 0.30
+
+# Existing spells
+lore associate a1b2c3d4
+lore associate a1b2c3d4 --apply
+```
+
+How scoring works:
+- semantic similarity score (dense embeddings or TF-IDF fallback)
+- shared tag bonus
+- same-category bonus
+
+Applied links are symmetric in `related_to` so both spells reference each other.
 
 ---
 
@@ -615,6 +647,14 @@ lore ui
 ```
 
 A retro phosphor-green terminal browser for searching, reading, adding, and exporting memories. Live-reloads whenever `.lore/` files change on disk — open it in a split pane while you work.
+
+TUI keys:
+- `a` add
+- `u` edit
+- `d` delete
+- `x` suggest/apply associations for selected spell
+- `g` dependency map
+- `e` export
 
 ---
 

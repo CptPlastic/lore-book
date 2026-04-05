@@ -801,6 +801,7 @@ def onboard() -> None:
     _beat(f"  [dim]A spell is one discrete piece of knowledge: a decision your team made,[/dim]")
     _beat(f"  [dim]a gotcha you hit, a rule your AI should always follow.[/dim]")
     _beat(f"  [dim]Spells are short, specific, and retrievable by semantic search.[/dim]")
+    _beat(f"  [dim]Lore can also suggest related spells automatically to build context links.[/dim]")
     _beat(f"  [dim](For long raw artifacts - session dumps, diffs, docs - use [bold {_P}]lore relic capture[/bold {_P}] instead.)[/dim]")
     console.print()
 
@@ -879,6 +880,8 @@ def onboard() -> None:
     _beat(f"  A few commands to guide your journey:")
     console.print()
     _beat(f"    [bold {_P}]lore add[/bold {_P}]                  [dim]Record a spell (interactive)[/dim]", 0.1)
+    _beat(f"    [bold {_P}]lore add --auto-associate[/bold {_P}] [dim]Save and auto-link related spells[/dim]", 0.1)
+    _beat(f"    [bold {_P}]lore associate <id>[/bold {_P}]       [dim]Suggest/apply links for one spell[/dim]", 0.1)
     _beat(f"    [bold {_P}]lore search <query>[/bold {_P}]       [dim]Find spells semantically[/dim]", 0.1)
     _beat(f"    [bold {_P}]lore setup semantic[/bold {_P}]     [dim]Enable dense vector search (guided)[/dim]", 0.1)
     _beat(f"    [bold {_P}]lore export[/bold {_P}]               [dim]Republish AI context files[/dim]", 0.1)

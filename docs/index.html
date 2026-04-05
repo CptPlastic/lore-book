@@ -79,6 +79,29 @@
       <div class="note">Requirements: Python 3.10+. Dense vector search is optional. If model loading fails, Lore falls back to TF-IDF so search still works.</div>
     </section>
 
+    <!-- ══ NEW IN 1.4.1 ══ -->
+    <section class="parchment">
+      <h2><span class="rune">✹</span> New in 1.4.1: Auto Association</h2>
+      <p>Lore can now suggest and apply related-memory links automatically using semantic similarity plus tag/category hints.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>Link While Writing</h3>
+          <p>Save a memory and have Lore propose nearby context links immediately.</p>
+          <div class="incantation"><span class="cmd">lore add</span> <span class="arg">decisions "..." --auto-associate</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>Associate Existing Memory</h3>
+          <p>Run suggestions on any existing memory by ID, preview first, then apply if it looks right.</p>
+          <div class="incantation"><span class="cmd">lore associate</span> <span class="arg">&lt;id&gt;</span><br><span class="cmd">lore associate</span> <span class="arg">&lt;id&gt; --apply</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>Tune the Matcher</h3>
+          <p>Control how many links are considered and how strict matching should be.</p>
+          <div class="incantation"><span class="cmd">lore add</span> <span class="arg">... --auto-associate --associate-top 5 --associate-min-score 0.30</span></div>
+        </div>
+      </div>
+    </section>
+
     <!-- ══ NEW IN 1.4.0 ══ -->
     <section class="parchment">
       <h2><span class="rune">✺</span> New in 1.4.0: Context Keeper</h2>
@@ -149,6 +172,7 @@
         <li><strong>Search</strong> — Semantic search across all spells as you type</li>
         <li><strong>Browse</strong> — Navigate tomes and read entries in a split pane</li>
         <li><strong>Add</strong> — Write new spells directly from the interface</li>
+        <li><strong>Associate</strong> — Press <code>x</code> on a selected spell to preview/apply related links</li>
         <li><strong>Export</strong> — Publish your Chronicle without leaving the TUI</li>
         <li><strong>Live reload</strong> — Watches <code>.lore/</code> on disk and updates instantly</li>
       </ul>
@@ -237,7 +261,7 @@
       <div class="command-columns">
         <div class="command-item">
           <strong>Store</strong>
-          <p><code>lore onboard</code>, <code>lore init</code>, <code>lore add</code>, <code>lore list</code>, <code>lore remove</code></p>
+          <p><code>lore onboard</code>, <code>lore init</code>, <code>lore add</code>, <code>lore associate</code>, <code>lore list</code>, <code>lore remove</code></p>
         </div>
         <div class="command-item">
           <strong>Search</strong>

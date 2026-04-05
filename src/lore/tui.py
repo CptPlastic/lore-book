@@ -59,6 +59,41 @@ def _glyph(cat: str) -> str:
     return _GLYPHS.get(cat, "◉")
 
 
+def _preview(text: str, limit: int = 96) -> str:
+    compact = " ".join(str(text or "").split())
+    return compact if len(compact) <= limit else compact[: limit - 1].rstrip() + "…"
+
+
+def _apply_related_links(root: Path, source_id: str, target_ids: list[str]) -> int:
+    memories = list_memories(root)
+    id_map = {str(m.get("id", "")): m for m in memories if m.get("id")}
+    source = id_map.get(source_id)
+    if source is None:
+        return 0
+
+    current_source = [str(v).strip() for v in (source.get("related_to") or []) if str(v).strip()]
+    updated_source = current_source[:]
+    applied = 0
+
+    for target_id in target_ids:
+        tid = str(target_id).strip()
+        if not tid or tid == source_id or tid not in id_map:
+            continue
+        if tid not in updated_source:
+            updated_source.append(tid)
+            applied += 1
+
+        target = id_map[tid]
+        target_related = [str(v).strip() for v in (target.get("related_to") or []) if str(v).strip()]
+        if source_id not in target_related:
+            target_related.append(source_id)
+            update_memory(root, tid, {"related_to": target_related})
+
+    if updated_source != current_source:
+        update_memory(root, source_id, {"related_to": updated_source})
+    return applied
+
+
 # ---------------------------------------------------------------------------
 # Shared modal button CSS fragment
 # ---------------------------------------------------------------------------
@@ -264,6 +299,77 @@ class DependencyMapScreen(ModalScreen):
             yield Label("◈  DEPENDENCY MAP  ◈", id="dialog-title", markup=False)
             yield Static(self._render_map(), id="map-box", markup=False)
             yield Label("[ ENTER · SPACE · ESC to close ]", id="hint", markup=False)
+
+
+class AssociationScreen(ModalScreen):
+    """Preview and optionally apply suggested related-memory links."""
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close", show=False),
+    ]
+
+    CSS = f"""
+    AssociationScreen {{ align: center middle; }}
+    #dialog {{
+        width: 108; height: auto;
+        border: solid {_BORDER}; background: {_BG}; padding: 1 2;
+    }}
+    #dialog-title {{
+        color: {_AMBER}; text-style: bold; text-align: center;
+        width: 1fr; margin-bottom: 1;
+    }}
+    #assoc-box {{
+        background: {_SURFACE}; color: {_PHOSPHOR_H};
+        border: solid {_BORDER}; padding: 0 1; margin: 1 0;
+        height: auto;
+    }}
+    #hint {{ color: {_PHOSPHOR_M}; text-align: center; margin-top: 1; }}
+    #btn-row {{ height: auto; align: right middle; margin-top: 1; }}
+    {_MODAL_BTN}
+    #apply {{
+        background: {_BORDER}; color: {_PHOSPHOR};
+        border: solid {_AMBER}; text-style: bold;
+    }}
+    #apply:hover {{ background: {_AMBER}; color: {_BG}; }}
+    """
+
+    def __init__(self, source_id: str, suggestions: list[dict]) -> None:
+        super().__init__()
+        self._source_id = source_id
+        self._suggestions = suggestions
+
+    def _render_lines(self) -> str:
+        lines = [
+            "score   semantic   id         category      shared tags        content",
+            "-----   --------   --------   -----------   -----------------  -------------------------------",
+        ]
+        for s in self._suggestions:
+            score = f"{float(s.get('_score', 0.0)):.3f}".ljust(7)
+            semantic = f"{float(s.get('_semantic_score', 0.0)):.3f}".ljust(8)
+            mem_id = str(s.get("id", "")).ljust(8)
+            category = str(s.get("category", "")).ljust(11)
+            tags = ",".join(s.get("_shared_tags", [])) or "-"
+            tags = tags[:17].ljust(17)
+            content = _preview(str(s.get("content", "")), 31)
+            lines.append(f"{score}  {semantic}   {mem_id}   {category}   {tags}  {content}")
+        return "\n".join(lines)
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(f"◈  ASSOCIATIONS FOR {self._source_id}  ◈", id="dialog-title", markup=False)
+            yield Static(self._render_lines(), id="assoc-box", markup=False)
+            yield Label("Apply will link these IDs in related_to on both sides.", id="hint", markup=False)
+            with Horizontal(id="btn-row"):
+                yield Button("[[ CLOSE ]]", id="cancel")
+                yield Button("[[ APPLY ]]", id="apply")
+
+    @on(Button.Pressed, "#cancel")
+    def cancel(self) -> None:
+        self.dismiss(False)
+
+    @on(Button.Pressed, "#apply")
+    def apply(self) -> None:
+        self.dismiss(True)
 
 
 # ---------------------------------------------------------------------------
@@ -665,6 +771,7 @@ class LoreApp(App):
         Binding("a",      "add_memory",    "Add"),
         Binding("u",      "edit_memory",   "Edit"),
         Binding("d",      "delete_memory", "Delete"),
+        Binding("x",      "associate_memory", "Assoc"),
         Binding("g",      "dependency_map", "Deps"),
         Binding("e",      "export_all",    "Export"),
         Binding("r",      "refresh",       "Refresh"),
@@ -888,6 +995,54 @@ class LoreApp(App):
 
     def action_dependency_map(self) -> None:
         self.push_screen(DependencyMapScreen(self._all_memories))
+
+    # ------------------------------------------------------------------
+    # Associate memories  (x key)
+    # ------------------------------------------------------------------
+
+    def action_associate_memory(self) -> None:
+        table = self.query_one(self._TABLE, DataTable)
+        try:
+            row = table.get_row_at(table.cursor_row)
+        except Exception:
+            return
+        mem_id = str(row[0]).strip()
+        if not mem_id:
+            return
+        self._set_status(f"▸ finding associations for [{mem_id}]…")
+        self._do_suggest_associations(mem_id)
+
+    @work(thread=True)
+    def _do_suggest_associations(self, mem_id: str) -> None:
+        from .search import suggest_associations
+
+        suggestions = suggest_associations(self._root, mem_id=mem_id, top_k=5, min_score=0.35)
+        self.call_from_thread(self._open_association_screen, mem_id, suggestions)
+
+    def _open_association_screen(self, mem_id: str, suggestions: list[dict]) -> None:
+        if not suggestions:
+            self._set_status(f"▸ no strong associations for [{mem_id}]")
+            self.notify("No strong associations found.", severity="warning")
+            return
+        self.push_screen(
+            AssociationScreen(mem_id, suggestions),
+            lambda apply_now: self._on_associate_result(bool(apply_now), mem_id, suggestions),
+        )
+
+    def _on_associate_result(self, apply_now: bool, mem_id: str, suggestions: list[dict]) -> None:
+        if not apply_now:
+            self._set_status(f"▸ association preview closed for [{mem_id}]")
+            return
+        target_ids = [str(s.get("id", "")).strip() for s in suggestions if s.get("id")]
+        self._set_status(f"▸ applying associations for [{mem_id}]…")
+        self._do_apply_associations(mem_id, target_ids)
+
+    @work(thread=True)
+    def _do_apply_associations(self, mem_id: str, target_ids: list[str]) -> None:
+        applied = _apply_related_links(self._root, mem_id, target_ids)
+        memories = list_memories(self._root)
+        self.call_from_thread(self._populate, memories, False)
+        self.call_from_thread(self._set_status, f"▸ ✓  applied {applied} related link(s) for [{mem_id}]")
 
     # ------------------------------------------------------------------
     # Edit memory  (u key)
