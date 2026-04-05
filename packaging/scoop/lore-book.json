@@ -7,7 +7,7 @@
   "architecture": {
     "64bit": {
       "url": "https://files.pythonhosted.org/packages/source/l/lore_book/lore_book-1.4.0.tar.gz",
-      "hash": "40065037e37864a5b3f2a727ef9685c88788c7f907c9af05def25bebb485cfe1"
+      "hash": "ddebc137307ed5d5007738f6b17bb2a3a1af32875c3fa352d908731844f9b115"
     }
   },
   "checkver": "https://pypi.org/pypi/lore-book/json",
