@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.0 - 2026-04-05
+
+### Features
+- Phase 1 context keeper — metadata, lint, trust history, extraction patterns
+
+### Other
+- Merge branch 'main' of https://github.com/CptPlastic/lore-book
+- Bump scoop to 1.3.1 and enhance packaging script
+
 ## v1.3.1 - 2026-03-26
 
 ### Other
