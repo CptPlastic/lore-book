@@ -410,6 +410,39 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#association-health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Association Health
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#one-time-upgrade-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-Time Upgrade Workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-auto-repair" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full Auto Repair
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -547,6 +580,35 @@
 </code></pre>
 <h2 id="export-context-files">Export Context Files<a class="headerlink" href="#export-context-files" title="Permanent link">&para;</a></h2>
 <pre><code class="language-bash">lore export
+</code></pre>
+
+<h2 id="association-health">Association Health<a class="headerlink" href="#association-health" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash">lore associate-audit
+lore associate-heal --apply
+lore associate-prune --min-score 0.25 --min-age-days 14 --apply
+lore associate-relink --top 3 --min-score 0.55 --apply
+</code></pre>
+
+<h2 id="one-time-upgrade-workflow">One-Time Upgrade Workflow<a class="headerlink" href="#one-time-upgrade-workflow" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 1) Audit current graph state
+lore associate-audit
+
+# 2) Backfill links using latest scoring policy
+lore associate-relink --apply
+
+# 3) Heal one-way links and prune stale weak edges
+lore associate-repair --apply
+
+# 4) Verify final health report
+lore associate-audit
+</code></pre>
+
+<h2 id="full-auto-repair">Full Auto Repair<a class="headerlink" href="#full-auto-repair" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># Dry run first (recommended)
+lore associate-repair
+
+# Apply changes
+lore associate-repair --apply
 </code></pre>
 
 
