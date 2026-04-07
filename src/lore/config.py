@@ -113,6 +113,18 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "trusted_authors": [],
         "author_weights": {},
     },
+    # Extraction patterns: teach lore to recognize custom commit messages and comments.
+    # Each pattern is evaluated during git history mining (lore extract).
+    # type: "regex" matches against commit message; type: "prefix" is case-insensitive prefix match.
+    "extraction_patterns": [
+        {
+            "name": "decision_comments",
+            "type": "regex",
+            "pattern": "(?i)(DECISION|DECISION:)",
+            "category": "decisions",
+            "enabled": True,
+        },
+    ],
 }
 
 

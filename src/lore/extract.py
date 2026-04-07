@@ -108,6 +108,10 @@ def extract_from_git(
     except Exception:
         raise RuntimeError(f"No git repository found at or above {root}")
 
+    from .config import load_config
+    cfg = load_config(root)
+    patterns = cfg.get("extraction_patterns", [])
+
     candidates: list[dict] = []
     for commit in repo.iter_commits(max_count=n_commits):
         if len(commit.parents) > 1:  # skip merge commits
@@ -115,15 +119,32 @@ def extract_from_git(
         if _is_lore_only_commit(commit):  # skip lore export-only commits
             continue
         sha = commit.hexsha[:8]
-        _extract_message(commit.message.strip(), sha, candidates)
+        _extract_message(commit.message.strip(), sha, candidates, patterns)
         _extract_diff_comments(commit, sha, candidates)
     return candidates
 
 
-def _extract_message(msg: str, sha: str, candidates: list[dict]) -> None:
+def _extract_message(msg: str, sha: str, candidates: list[dict], patterns: list | None = None) -> None:
+    import re
     if len(msg) > 10:
+        category = _categorize_message(msg)
+        if patterns:
+            for pat in patterns:
+                if not pat.get("enabled", True):
+                    continue
+                try:
+                    pat_type = pat.get("type", "prefix").lower()
+                    pat_str = pat.get("pattern", "")
+                    if pat_type == "regex" and re.search(pat_str, msg):
+                        category = pat.get("category", category)
+                        break
+                    elif pat_type == "prefix" and msg.lower().startswith(pat_str.lower()):
+                        category = pat.get("category", category)
+                        break
+                except Exception:
+                    pass
         candidates.append({
-            "category": _categorize_message(msg),
+            "category": category,
             "content": msg,
             "source": f"git:{sha}",
             "commit_sha": sha,

@@ -565,6 +565,19 @@
 <h2 id="install-from-pypi">Install From PyPI<a class="headerlink" href="#install-from-pypi" title="Permanent link">&para;</a></h2>
 <pre><code class="language-bash">pip install lore-book
 </code></pre>
+<h2 id="windows-recommended">Windows (Recommended)<a class="headerlink" href="#windows-recommended" title="Permanent link">&para;</a></h2>
+<p>If your Scoop bucket is published, this is the cleanest Windows package-manager install:</p>
+<pre><code class="language-powershell">scoop bucket add cptplastic https://github.com/CptPlastic/scoop-lore-book
+scoop install lore-book
+</code></pre>
+<p>Until that bucket is live, use <code>pipx</code>:</p>
+<pre><code class="language-powershell">py -m pip install --user pipx
+py -m pipx ensurepath
+pipx install lore-book
+</code></pre>
+<p>If you are installing from this repository:</p>
+<pre><code class="language-powershell">powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1
+</code></pre>
 <h2 id="local-development-install">Local Development Install<a class="headerlink" href="#local-development-install" title="Permanent link">&para;</a></h2>
 <pre><code class="language-bash">pip install -e .
 </code></pre>

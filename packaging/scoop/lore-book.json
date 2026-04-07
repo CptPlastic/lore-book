@@ -1,0 +1,36 @@
+{
+  "version": "1.4.2",
+  "description": "The spellbook for your codebase - chronicle decisions, context, and lessons your AI tools can read.",
+  "homepage": "https://github.com/CptPlastic/lore-book",
+  "license": "FSL-1.1-MIT",
+  "depends": "python",
+  "architecture": {
+    "64bit": {
+      "url": "https://files.pythonhosted.org/packages/source/l/lore_book/lore_book-1.4.2.tar.gz",
+      "hash": "da2fd1f5c1ddfae460fe33491977a2b313f1d7684a27cb7afe372e6e260fa8b0"
+    }
+  },
+  "checkver": "https://pypi.org/pypi/lore-book/json",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://files.pythonhosted.org/packages/source/l/lore_book/lore_book-$version.tar.gz"
+      }
+    }
+  },
+  "pre_install": [
+    "$installRoot = $dir",
+    "if (-not (Test-Path (Join-Path $installRoot \"pyproject.toml\")) -and -not (Test-Path (Join-Path $installRoot \"setup.py\"))) {",
+    "  $candidate = Get-ChildItem -Path $dir -Directory | Where-Object { (Test-Path (Join-Path $_.FullName \"pyproject.toml\")) -or (Test-Path (Join-Path $_.FullName \"setup.py\")) } | Select-Object -First 1",
+    "  if ($candidate) { $installRoot = $candidate.FullName } else { throw \"Could not locate extracted Python package root in Scoop payload.\" }",
+    "}",
+    "python -m pip install --upgrade --target \"$dir\\site\" \"$installRoot\"",
+    "if ($LASTEXITCODE -ne 0) { throw \"Failed to install lore-book from extracted package payload.\" }",
+    "$env:PYTHONPATH = \"$dir\\site;$env:PYTHONPATH\"",
+    "$installed = python -c \"import lore; print(lore.__version__)\"",
+    "if ($LASTEXITCODE -ne 0) { throw \"Failed to validate installed lore-book version.\" }",
+    "if ($installed.Trim() -ne $version) { throw \"Installed lore-book version does not match manifest version.\" }",
+    "Set-Content -Path \"$dir\\lore.cmd\" -Value \"@echo off`r`nsetlocal`r`nset \"\"PYTHONPATH=%~dp0site;%PYTHONPATH%\"\"`r`npython -c \"\"from lore.cli import app; app()\"\" %*\" -Encoding Ascii"
+  ],
+  "bin": "lore.cmd"
+}

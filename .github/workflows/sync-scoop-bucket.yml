@@ -1,0 +1,84 @@
+name: Sync Scoop Bucket
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - packaging/scoop/lore-book.json
+  workflow_dispatch:
+
+concurrency:
+  group: sync-scoop-bucket-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Validate required secret
+        env:
+          SCOOP_BUCKET_PAT: ${{ secrets.SCOOP_BUCKET_PAT }}
+        run: |
+          if [ -z "$SCOOP_BUCKET_PAT" ]; then
+            echo "Missing required secret: SCOOP_BUCKET_PAT"
+            echo "Create a classic PAT with repo scope (or fine-grained token with contents+pull_requests write) for CptPlastic/scoop-lore-book."
+            exit 1
+          fi
+
+      - name: Sync manifest and open PR
+        env:
+          GH_TOKEN: ${{ secrets.SCOOP_BUCKET_PAT }}
+          TARGET_REPO: CptPlastic/scoop-lore-book
+        run: |
+          set -euo pipefail
+
+          SOURCE_MANIFEST="packaging/scoop/lore-book.json"
+          VERSION="$(jq -r '.version' "$SOURCE_MANIFEST")"
+
+          WORK_DIR="$(mktemp -d)"
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${TARGET_REPO}.git" "$WORK_DIR"
+
+          DEFAULT_BRANCH="$(git -C "$WORK_DIR" symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')"
+
+          mkdir -p "$WORK_DIR/bucket"
+          cp "$SOURCE_MANIFEST" "$WORK_DIR/bucket/lore-book.json"
+
+          if git -C "$WORK_DIR" diff --quiet -- bucket/lore-book.json; then
+            echo "Scoop manifest is already up to date in ${TARGET_REPO}."
+            exit 0
+          fi
+
+          BRANCH="chore/lore-book-scoop-v${VERSION}-$(date +%s)"
+
+          git -C "$WORK_DIR" checkout -b "$BRANCH"
+          git -C "$WORK_DIR" config user.name "github-actions[bot]"
+          git -C "$WORK_DIR" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$WORK_DIR" add bucket/lore-book.json
+          git -C "$WORK_DIR" commit -m "chore: update lore-book Scoop manifest to v${VERSION}"
+          git -C "$WORK_DIR" push origin "$BRANCH"
+
+          PR_TITLE="chore: update lore-book Scoop manifest to v${VERSION}"
+          PR_BODY=$(cat <<'EOF'
+          Automated update from CptPlastic/lore-book.
+
+          Source manifest:
+          - packaging/scoop/lore-book.json
+
+          This PR updates:
+          - bucket/lore-book.json
+          EOF
+          )
+
+          gh pr create \
+            --repo "$TARGET_REPO" \
+            --base "$DEFAULT_BRANCH" \
+            --head "$BRANCH" \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY"

@@ -82,11 +82,26 @@ def _short_id() -> str:
     return str(uuid.uuid4())[:8]
 
 
+def _normalize_id_list(values: list[str] | None) -> list[str]:
+    if not values:
+        return []
+    out: list[str] = []
+    for value in values:
+        item = (value or "").strip()
+        if item and item not in out:
+            out.append(item)
+    return out
+
+
 def add_memory(
     root: Path,
     category: str,
     content: str,
     tags: list[str] | None = None,
+    depends_on: list[str] | None = None,
+    related_to: list[str] | None = None,
+    deprecated: bool = False,
+    review_date: str | None = None,
     source: str = "manual",
 ) -> dict[str, Any]:
     """Write a new memory entry and return the stored dict."""
@@ -114,10 +129,15 @@ def add_memory(
         "category": category,
         "content": content,
         "tags": tags or [],
+        "depends_on": _normalize_id_list(depends_on),
+        "related_to": _normalize_id_list(related_to),
+        "deprecated": bool(deprecated),
         "source": source,
         "created_at": now.isoformat(),
         "trust_score": max(0, min(100, default_trust)),
     }
+    if review_date:
+        entry["review_date"] = review_date
     if gctx.get("branch"):
         entry["git_branch"] = gctx["branch"]
     if gctx.get("author"):
@@ -197,6 +217,12 @@ def update_memory(root: Path, mem_id: str, updates: dict[str, Any]) -> dict[str,
 
     old_category = entry.get("category", "")
     new_category = updates.get("category", old_category)
+
+    # Normalize metadata lists when they are updated.
+    if "depends_on" in updates:
+        updates["depends_on"] = _normalize_id_list(updates.get("depends_on"))
+    if "related_to" in updates:
+        updates["related_to"] = _normalize_id_list(updates.get("related_to"))
 
     # Apply updates (exclude internal helper keys)
     for k, v in updates.items():

@@ -99,6 +99,74 @@ Exports are atomic — a crash mid-write never leaves a partial file.
 pip install lore-book
 ```
 
+### Windows (recommended)
+
+If you publish the Scoop bucket, this becomes the cleanest install path for Windows users:
+
+```powershell
+scoop bucket add cptplastic https://github.com/CptPlastic/scoop-lore-book
+scoop install lore-book
+```
+
+Until that bucket is live, use `pipx`:
+
+Use the Python launcher so the command works consistently across Windows setups:
+
+```powershell
+py -m pip install --upgrade lore-book
+```
+
+If you prefer isolated CLI installs, `pipx` is the smoothest option on Windows:
+
+```powershell
+py -m pip install --user pipx
+py -m pipx ensurepath
+pipx install lore-book
+```
+
+If you are installing from this repository, use the bootstrap script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1
+```
+
+Optional modes:
+
+```powershell
+# Force plain pip install mode
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -Mode pip
+
+# Install from local source path via pipx
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -SourcePath .
+```
+
+### Windows package managers
+
+Scoop is the intended easiest Windows package-manager path once your bucket is published.
+
+Until then, `pipx install lore-book` is the easiest path for most users.
+
+This repo now generates Windows packaging artifacts during release:
+
+- Scoop manifest: `packaging/scoop/lore-book.json`
+- winget submission helper: `packaging/winget/submission-<version>.md`
+
+After each release, use these to publish:
+
+1. Submit `packaging/scoop/lore-book.json` to your Scoop bucket repository.
+2. Use `packaging/winget/submission-<version>.md` to open/update a PR in `microsoft/winget-pkgs`.
+
+A ready-to-push Scoop bucket template is included in `packaging/scoop-bucket-template/`.
+
+### Automatic Scoop bucket PRs
+
+This repository includes a workflow that can open a PR against `CptPlastic/scoop-lore-book` whenever `packaging/scoop/lore-book.json` changes:
+
+- Workflow: `.github/workflows/sync-scoop-bucket.yml`
+- Required secret: `SCOOP_BUCKET_PAT`
+
+`SCOOP_BUCKET_PAT` should have write access to `CptPlastic/scoop-lore-book` (classic `repo` scope, or fine-grained token with `contents` + `pull_requests` write).
+
 For local development:
 
 ```sh
@@ -145,7 +213,7 @@ Preview locally:
 
 ```sh
 cd docs
-python3 -m http.server 8000
+python -m http.server 8000
 ```
 
 Then open:
@@ -178,10 +246,17 @@ Onboard/Init also add local adapter files to `.gitignore` by default, so only sh
 # Interactive, step-by-step
 lore add
 
+# Save and auto-link related spells
+lore add decisions "Use FastAPI — async support + automatic OpenAPI docs" --tags api,backend --auto-associate
+
 # One-liner (scriptable, CI-friendly)
 lore add decisions "Use FastAPI — async support + automatic OpenAPI docs"
 lore add preferences "Always use type hints" --tags style,python
 lore add facts "Minimum supported Python is 3.10"
+
+# Suggest or apply related links for an existing spell
+lore associate <id>
+lore associate <id> --apply
 
 # Semantic search — finds conceptually related spells, not just keyword matches
 lore search "why did we choose FastAPI"
@@ -198,6 +273,116 @@ lore remove <id>
 ```
 
 Spell IDs are short UUID prefixes. `lore list` shows them.
+
+---
+
+## New in v1.4.1 - auto association
+
+Lore can now suggest relationship links between spells automatically.
+
+```sh
+# During add
+lore add facts "Scoop installer uses local extracted payload" --tags windows,scoop --auto-associate
+
+# Tune association behavior
+lore add decisions "..." --auto-associate --associate-top 5 --associate-min-score 0.30
+
+# Existing spells
+lore associate a1b2c3d4
+lore associate a1b2c3d4 --apply
+```
+
+How scoring works:
+- semantic similarity score (dense embeddings or TF-IDF fallback)
+- shared tag bonus
+- same-category bonus
+
+Applied links are symmetric in `related_to` so both spells reference each other.
+
+---
+
+## New in v1.4.0 - context keeper features
+
+The 1.4.0 release adds relationship metadata, linting, trust history, and configurable extraction patterns.
+
+### 1) Add metadata to spells
+
+You can link memories together, mark deprecations, and set review dates.
+
+```sh
+# Interactive (includes metadata steps)
+lore add
+
+# Scriptable form
+lore add decisions "Use OAuth device flow for CLI auth" \
+  --depends-on 02e0914c,6c8887fe \
+  --related-to e07d12be \
+  --review-date 2026-06-01
+
+# Mark a memory as deprecated later
+lore edit e07d12be
+```
+
+Metadata fields:
+- `depends_on` - memory IDs this entry relies on
+- `related_to` - memory IDs that are contextually related
+- `deprecated` - lifecycle flag for old guidance
+- `review_date` - date to revisit stale decisions
+
+### 2) Run memory quality checks with lore lint
+
+```sh
+# Show findings only
+lore lint
+
+# Fail CI on errors
+lore lint --fail-on error
+
+# Fail CI on errors and warnings
+lore lint --fail-on error,warning
+```
+
+`lore lint` checks:
+- empty memory content
+- likely duplicates
+- invalid instruction scope tags
+- broken relationship references
+- invalid or past review dates
+- invalid deprecated flag types
+- trust score threshold warnings
+
+### 3) Track trust changes over time
+
+```sh
+# Recompute trust from git signals
+lore trust refresh
+
+# Explain one memory's trust and see recent history
+lore trust explain e07d12be
+```
+
+Each refresh writes rolling trust snapshots (score, level, reasons, timestamp) so score changes are auditable.
+
+### 4) Teach extraction your commit conventions
+
+Use the new interactive pattern manager:
+
+```sh
+lore setup extract-patterns
+```
+
+This lets you add regex or prefix rules that auto-categorize commit-derived memories during extraction.
+
+Then extract as usual:
+
+```sh
+lore extract --last 20 --auto
+```
+
+Example conventions:
+- `chore(release):` -> `decisions`
+- `docs:` -> `summaries`
+- `fix:` -> `facts`
 
 ---
 
@@ -218,7 +403,7 @@ lore relic capture --git-diff --title "Pre-deploy changes"
 # Capture the last N commits (messages + diffs)
 lore relic capture --git-log 5 --title "Sprint 12 wrap-up"
 
-# Read from clipboard (macOS: pbpaste, Linux: xclip)
+# Read from clipboard (Windows: PowerShell Get-Clipboard, macOS: pbpaste, Linux: xclip)
 lore relic capture --clipboard --title "Slack thread on rate limiting"
 
 # Pipe anything in
@@ -507,6 +692,14 @@ lore ui
 ```
 
 A retro phosphor-green terminal browser for searching, reading, adding, and exporting memories. Live-reloads whenever `.lore/` files change on disk — open it in a split pane while you work.
+
+TUI keys:
+- `a` add
+- `u` edit
+- `d` delete
+- `x` suggest/apply associations for selected spell
+- `g` dependency map
+- `e` export
 
 ---
 
