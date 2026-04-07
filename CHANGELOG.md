@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.4 - 2026-04-07
+
+### Other
+- Add re-entry guard to git hooks
+- Merge branch 'main' of https://github.com/CptPlastic/lore-book
+- Document CLI additions and CHRONICLE updates
+
 ## v1.4.3 - 2026-04-07
 
 ### Fixes
