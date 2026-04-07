@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.5 - 2026-04-07
+
+### Other
+- Avoid no-op chronicle sync and fix related link call
+- Merge branch 'main' of https://github.com/CptPlastic/lore-book
+- Document re-entry guard for git hooks
+
 ## v1.4.4 - 2026-04-07
 
 ### Other
