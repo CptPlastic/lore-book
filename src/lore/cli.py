@@ -13,6 +13,18 @@ from rich.panel import Panel
 from rich import box
 
 from . import __version__
+from .associations import (
+    apply_related_links,
+    audit_graph,
+    generate_recommendations,
+    heal_one_way_links,
+    load_association_policy,
+    prune_stale_links,
+    repair_graph,
+    relink_memories,
+    resolve_association_run,
+    suggest_for_entry,
+)
 from .config import LOCAL_AGENT_FILES
 
 # ---------------------------------------------------------------------------
@@ -103,6 +115,9 @@ _MORE_ROWS = [
     ("list",          "\\[category]",             "list memories, optionally by tome"),
     ("lint",          "\\[--fail-on LEVELS]",      "check memory quality and metadata integrity"),
     ("associate",     "<id>",                   "suggest or apply related memory links"),
+    ("associate-audit", "[--hub-threshold N]",   "inspect graph quality (orphans, one-way links, hubs)"),
+    ("associate-relink", "[--apply] [--top N]",   "recompute links for all/selected memories"),
+    ("associate-prune", "[--apply] [--min-score F]", "prune weak stale links (dry-run by default)"),
     ("remove",        "<id>",                   "delete a memory by its ID"),
     ("extract",       "\\[--last N]",             "pull memories from recent git commits"),
     ("sync",          "\\[--file PATH]",          "import shared CHRONICLE entries into .lore"),
@@ -112,7 +127,7 @@ _MORE_ROWS = [
     ("setup",         "extract-patterns",        "manage custom extraction patterns for commits"),
     ("trust",         "refresh",                 "recompute memory trust from git signals"),
     ("trust",         "explain <id>",            "show trust score inputs for one memory"),
-    ("awaken",        "\\[--background]",         "👁  watch .lore and auto-export on change"),
+    ("awaken",        "\\[--background] \\[--sync-chronicle] \\[--associate]", "👁  watch .lore, auto-export, optional sync/linking"),
     ("slumber",       "",                        "banish the background daemon"),
     ("config",        "<key> <value>",           "set a config value"),
     ("security",      "",                        "configure security guidelines for exports"),
@@ -266,38 +281,6 @@ def _print_association_table(suggestions: list[dict[str, Any]]) -> None:
     console.print(table)
 
 
-def _apply_related_links(root: Path, source_id: str, target_ids: list[str]) -> int:
-    from .store import list_memories, update_memory
-
-    memories = list_memories(root)
-    id_map = {str(m.get("id", "")): m for m in memories if m.get("id")}
-    source = id_map.get(source_id)
-    if source is None:
-        return 0
-
-    current_source = [str(v).strip() for v in (source.get("related_to") or []) if str(v).strip()]
-    updated_source = current_source[:]
-    applied = 0
-
-    for target_id in target_ids:
-        tid = str(target_id).strip()
-        if not tid or tid == source_id or tid not in id_map:
-            continue
-        if tid not in updated_source:
-            updated_source.append(tid)
-            applied += 1
-
-        target = id_map[tid]
-        target_related = [str(v).strip() for v in (target.get("related_to") or []) if str(v).strip()]
-        if source_id not in target_related:
-            target_related.append(source_id)
-            update_memory(root, tid, {"related_to": target_related})
-
-    if updated_source != current_source:
-        update_memory(root, source_id, {"related_to": updated_source})
-    return applied
-
-
 def _interactive_add_inputs(root: Path) -> tuple[str, str, str | None, str | None, str | None, bool, str | None]:
     from .config import load_config
     from rich.prompt import Prompt, Confirm
@@ -385,19 +368,19 @@ def _auto_associate_entry(
     interactive_mode: bool,
     associate_top: int,
     associate_min_score: float,
-) -> None:
+    quiet_no_matches: bool = False,
+) -> int:
     from rich.prompt import Confirm
-    from .search import suggest_associations
-
-    suggestions = suggest_associations(
+    suggestions = suggest_for_entry(
         root,
-        mem_id=entry["id"],
-        top_k=max(1, associate_top),
-        min_score=max(0.0, min(1.0, associate_min_score)),
+        entry_id=str(entry["id"]),
+        top_k=associate_top,
+        min_score=associate_min_score,
     )
     if not suggestions:
-        console.print("  [dim]No strong related-memory suggestions found.[/dim]")
-        return
+        if not quiet_no_matches:
+            console.print("  [dim]No strong related-memory suggestions found.[/dim]")
+        return 0
 
     console.print()
     console.print(f"  [bold {_A}]Suggested associations[/bold {_A}] for [bold]{entry['id']}[/bold]")
@@ -410,8 +393,21 @@ def _auto_associate_entry(
             default=True,
         )
     if should_apply:
-        applied = _apply_related_links(root, entry["id"], [str(s.get("id", "")) for s in suggestions])
+        score_map = {
+            str(item.get("id", "")).strip(): float(item.get("_score", 0.0))
+            for item in suggestions
+            if str(item.get("id", "")).strip()
+        }
+        applied = apply_related_links(
+            root,
+            str(entry["id"]),
+            [str(s.get("id", "")) for s in suggestions],
+            source_scores=score_map,
+            linked_by="auto-associate",
+        )
         console.print(f"  [bold {_P}]✓[/bold {_P}]  Linked [bold]{applied}[/bold] related memories")
+        return applied
+    return 0
 
 
 def _ensure_gitignore_entries(root: Path, entries: list[str]) -> list[str]:
@@ -929,17 +925,17 @@ def add(
         typer.Option("--review-date", help="Optional review date in YYYY-MM-DD format"),
     ] = None,
     auto_associate: Annotated[
-        bool,
-        typer.Option("--auto-associate", help="Suggest and attach related memories automatically"),
-    ] = False,
+        Optional[bool],
+        typer.Option("--auto-associate/--no-auto-associate", help="Suggest and attach related memories automatically"),
+    ] = None,
     associate_top: Annotated[
-        int,
+        Optional[int],
         typer.Option("--associate-top", help="Maximum number of related memories to attach"),
-    ] = 3,
+    ] = None,
     associate_min_score: Annotated[
-        float,
+        Optional[float],
         typer.Option("--associate-min-score", help="Minimum association score to accept"),
-    ] = 0.35,
+    ] = None,
 ) -> None:
     """Add a new memory entry (interactive walkthrough when called with no args)."""
     from .store import add_memory
@@ -974,13 +970,22 @@ def add(
         )
         index_memory(root, entry["id"], content)
 
-    if auto_associate:
+    association = load_association_policy(root)
+    should_associate, resolved_top, resolved_min = resolve_association_run(
+        association,
+        stage="add",
+        auto_associate=auto_associate,
+        associate_top=associate_top,
+        associate_min_score=associate_min_score,
+    )
+
+    if should_associate:
         _auto_associate_entry(
             root,
             entry,
-            interactive_mode=interactive_mode,
-            associate_top=associate_top,
-            associate_min_score=associate_min_score,
+            interactive_mode=False,
+            associate_top=resolved_top,
+            associate_min_score=resolved_min,
         )
     console.print(
         f"  [bold {_P}]✓[/bold {_P}]  Saved [bold]{entry['id']}[/bold] → [bold]{category}[/bold]"
@@ -1213,7 +1218,6 @@ def associate(
 ) -> None:
     """Suggest related memories for an existing entry, optionally applying them."""
     from .export import export_all
-    from .search import suggest_associations
     from .store import list_memories
 
     root = _require_root()
@@ -1233,11 +1237,11 @@ def associate(
         raise typer.Exit(code=1)
 
     with console.status("Finding associations…"):
-        suggestions = suggest_associations(
+        suggestions = suggest_for_entry(
             root,
-            mem_id=str(mem.get("id", "")),
-            top_k=max(1, top),
-            min_score=max(0.0, min(1.0, min_score)),
+            entry_id=str(mem.get("id", "")),
+            top_k=top,
+            min_score=min_score,
         )
 
     if not suggestions:
@@ -1248,10 +1252,281 @@ def associate(
     _print_association_table(suggestions)
 
     if apply:
-        applied = _apply_related_links(root, str(mem.get("id", "")), [str(s.get("id", "")) for s in suggestions])
+        score_map = {
+            str(item.get("id", "")).strip(): float(item.get("_score", 0.0))
+            for item in suggestions
+            if str(item.get("id", "")).strip()
+        }
+        applied = apply_related_links(
+            root,
+            str(mem.get("id", "")),
+            [str(s.get("id", "")) for s in suggestions],
+            source_scores=score_map,
+            linked_by="associate-command",
+        )
         with console.status("Updating chronicle…"):
             export_all(root)
         console.print(f"  [bold {_P}]✓[/bold {_P}]  Applied [bold]{applied}[/bold] related links and updated the chronicle")
+
+
+@app.command("associate-audit")
+def associate_audit(
+    hub_threshold: Annotated[
+        int,
+        typer.Option("--hub-threshold", help="Flag nodes with this many or more outgoing links as hubs"),
+    ] = 12,
+) -> None:
+    """Audit association graph quality (dangling refs, one-way links, hubs, orphans)."""
+    root = _require_root()
+    report = audit_graph(root, hub_threshold=hub_threshold)
+
+    summary = Table(show_header=True, header_style=f"bold {_A}", expand=False)
+    summary.add_column("Metric", style=f"bold {_P}")
+    summary.add_column("Value", justify="right")
+    summary.add_row("Memories", str(report["memory_count"]))
+    summary.add_row("Dangling refs", str(len(report["dangling_refs"])))
+    summary.add_row("Missing reverse links", str(len(report["missing_reverse"])))
+    summary.add_row("Self links", str(len(report["self_links"])))
+    summary.add_row("Hub nodes", str(len(report["hubs"])))
+    summary.add_row("Orphans", str(len(report["orphans"])))
+    console.print(summary)
+
+    buckets = report.get("confidence_buckets", {})
+    if buckets.get("total", 0) > 0:
+        conf_table = Table(show_header=True, header_style=f"bold {_A}", expand=False)
+        conf_table.add_column("Confidence", style=f"bold {_P}")
+        conf_table.add_column("Count", justify="right")
+        conf_table.add_column("Percentage", justify="right")
+        total = buckets.get("total", 1)
+        conf_table.add_row("High (≥0.75)", str(buckets["high"]), f"{100*buckets['high']/total:.1f}%")
+        conf_table.add_row("Medium (0.55-0.74)", str(buckets["medium"]), f"{100*buckets['medium']/total:.1f}%")
+        conf_table.add_row("Low (<0.55)", str(buckets["low"]), f"{100*buckets['low']/total:.1f}%")
+        console.print()
+        console.print(f"[bold {_A}]Edge confidence distribution[/bold {_A}] (avg score: {buckets['avg_score']})")
+        console.print(conf_table)
+
+    if report["dangling_refs"]:
+        table = Table(show_header=True, header_style=f"bold {_A}", expand=False)
+        table.add_column("Source", style="dim")
+        table.add_column("Missing Target", style="dim")
+        for src, target in report["dangling_refs"][:20]:
+            table.add_row(src, target)
+        console.print()
+        console.print(f"[bold {_A}]Dangling references[/bold {_A}]")
+        console.print(table)
+
+    if report["missing_reverse"]:
+        table = Table(show_header=True, header_style=f"bold {_A}", expand=False)
+        table.add_column("Source", style="dim")
+        table.add_column("Target missing reverse", style="dim")
+        for src, target in report["missing_reverse"][:20]:
+            table.add_row(src, target)
+        console.print()
+        console.print(f"[bold {_A}]One-way relationships[/bold {_A}]")
+        console.print(table)
+
+    if report["hubs"]:
+        table = Table(show_header=True, header_style=f"bold {_A}", expand=False)
+        table.add_column("Memory ID", style="dim")
+        table.add_column("Outgoing links", justify="right")
+        for mem_id, degree in report["hubs"][:20]:
+            table.add_row(mem_id, str(degree))
+        console.print()
+        console.print(f"[bold {_A}]Hub nodes[/bold {_A}]")
+        console.print(table)
+
+    if report["orphans"]:
+        console.print()
+        console.print(f"[bold {_A}]Orphan memories[/bold {_A}] [dim](first 20)[/dim]:")
+        console.print("  " + ", ".join(report["orphans"][:20]))
+
+    recommendations = generate_recommendations(report)
+    if recommendations:
+        console.print()
+        console.print(f"[bold {_A}]Recommendations[/bold {_A}]")
+        rec_table = Table(show_header=True, header_style=f"bold {_A}", expand=False)
+        rec_table.add_column("Priority", style=f"bold {_P}")
+        rec_table.add_column("Action", style="dim")
+        rec_table.add_column("Description", style="dim")
+        for priority, action, description in recommendations:
+            icon = "⚠" if priority == "high" else "→" if priority == "medium" else "ℹ"
+            rec_table.add_row(f"{icon} {priority}", action, description)
+        console.print(rec_table)
+
+    if (
+        not report["dangling_refs"]
+        and not report["missing_reverse"]
+        and not report["self_links"]
+    ):
+        console.print(f"\n[bold {_P}]Graph integrity looks healthy.[/bold {_P}]")
+
+
+@app.command("associate-relink")
+def associate_relink(
+    ids: Annotated[
+        Optional[str],
+        typer.Option("--ids", help="Comma-separated memory IDs; omit to process all memories"),
+    ] = None,
+    top: Annotated[
+        int,
+        typer.Option("--top", help="Maximum number of related memories to consider per memory"),
+    ] = 3,
+    min_score: Annotated[
+        float,
+        typer.Option("--min-score", help="Minimum association score to include"),
+    ] = 0.55,
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Apply computed links (default is dry-run summary only)"),
+    ] = False,
+) -> None:
+    """Recompute links for all or selected memories; dry-run by default."""
+    from .export import export_all
+
+    root = _require_root()
+    memory_ids = _parse_id_csv(ids)
+    mode = "apply" if apply else "dry-run"
+
+    with console.status(f"Running association relink ({mode})…"):
+        stats = relink_memories(
+            root,
+            memory_ids=memory_ids,
+            top_k=top,
+            min_score=min_score,
+            apply=apply,
+        )
+
+    console.print(
+        f"[green]Relink {mode} complete.[/green] "
+        f"Scanned [bold]{stats['scanned']}[/bold], "
+        f"proposed [bold]{stats['proposed_links']}[/bold], "
+        f"applied [bold]{stats['applied_links']}[/bold]."
+    )
+
+    if apply:
+        with console.status("Updating chronicle…"):
+            export_all(root)
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  Chronicle updated")
+
+
+@app.command("associate-prune")
+def associate_prune(
+    min_score: Annotated[
+        float,
+        typer.Option("--min-score", help="Prune links whose current association score is below this threshold"),
+    ] = 0.25,
+    min_age_days: Annotated[
+        float,
+        typer.Option("--min-age-days", help="Only prune links at least this many days old"),
+    ] = 14.0,
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Apply pruning changes (default is dry-run summary only)"),
+    ] = False,
+) -> None:
+    """Prune stale weak links using score and age thresholds (dry-run by default)."""
+    from .export import export_all
+
+    root = _require_root()
+    mode = "apply" if apply else "dry-run"
+
+    with console.status(f"Running association prune ({mode})…"):
+        stats = prune_stale_links(
+            root,
+            min_score=min_score,
+            min_age_days=min_age_days,
+            apply=apply,
+        )
+
+    console.print(
+        f"[green]Prune {mode} complete.[/green] "
+        f"Scanned [bold]{stats['scanned']}[/bold], "
+        f"proposed removals [bold]{stats['proposed_removals']}[/bold], "
+        f"applied removals [bold]{stats['applied_removals']}[/bold]."
+    )
+
+    if apply:
+        with console.status("Updating chronicle…"):
+            export_all(root)
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  Chronicle updated")
+
+
+@app.command("associate-heal")
+def associate_heal(
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Apply healing changes (default is dry-run summary only)"),
+    ] = False,
+) -> None:
+    """Fix one-way links by adding reverse links with the same scores (dry-run by default)."""
+    from .export import export_all
+
+    root = _require_root()
+    mode = "apply" if apply else "dry-run"
+
+    with console.status(f"Running association heal ({mode})…"):
+        stats = heal_one_way_links(root, apply=apply)
+
+    console.print(
+        f"[green]Heal {mode} complete.[/green] "
+        f"Scanned [bold]{stats['scanned']}[/bold], "
+        f"found asymmetric [bold]{stats['found_asymmetric']}[/bold], "
+        f"healed [bold]{stats['healed']}[/bold]."
+    )
+
+    if apply:
+        with console.status("Updating chronicle…"):
+            export_all(root)
+        console.print(f"  [bold {_P}]✓[/bold {_P}]  Chronicle updated")
+
+
+@app.command("associate-repair")
+def associate_repair(
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Apply all repairs (default is dry-run summary only)"),
+    ] = False,
+) -> None:
+    """Full graph repair: heal one-way links, prune stale, audit and recommend (dry-run by default)."""
+    from .export import export_all
+
+    root = _require_root()
+    mode = "apply" if apply else "dry-run"
+
+    with console.status(f"Running association repair ({mode})…"):
+        result = repair_graph(root, apply=apply)
+
+    console.print()
+    console.print(f"[green]Repair {mode} complete.[/green]")
+    console.print(
+        f"  Healed [bold]{result['healed']}[/bold] one-way links, "
+        f"pruned [bold]{result['pruned']}[/bold] stale links."
+    )
+
+    audit = result.get("audit", {})
+    summary = Table(show_header=True, header_style=f"bold {_A}", expand=False)
+    summary.add_column("Graph Metric", style=f"bold {_P}")
+    summary.add_column("Value", justify="right")
+    summary.add_row("Memories", str(audit.get("memory_count", 0)))
+    summary.add_row("Dangling refs", str(len(audit.get("dangling_refs", []))))
+    summary.add_row("Missing reverses", str(len(audit.get("missing_reverse", []))))
+    summary.add_row("Orphans", str(len(audit.get("orphans", []))))
+    console.print()
+    console.print(summary)
+
+    recommendations = result.get("recommendations", [])
+    if recommendations and any(r[0] != "info" for r in recommendations):
+        console.print()
+        console.print(f"[bold {_A}]Next steps[/bold {_A}]")
+        for priority, action, description in recommendations:
+            if priority != "info":
+                icon = "⚠" if priority == "high" else "→"
+                console.print(f"  {icon} [{action}] {description}")
+
+    if apply:
+        with console.status("Updating chronicle…"):
+            export_all(root)
+        console.print(f"\n  [bold {_P}]✓[/bold {_P}]  Chronicle updated")
 
 
 # ---------------------------------------------------------------------------
@@ -1376,6 +1651,18 @@ def edit(
     ref: Annotated[
         Optional[str],
         typer.Argument(help="Row number from `lore list` or memory ID prefix"),
+    ] = None,
+    auto_associate: Annotated[
+        Optional[bool],
+        typer.Option("--auto-associate/--no-auto-associate", help="Run automatic related-memory linking after edit"),
+    ] = None,
+    associate_top: Annotated[
+        Optional[int],
+        typer.Option("--associate-top", help="Maximum number of related memories to attach"),
+    ] = None,
+    associate_min_score: Annotated[
+        Optional[float],
+        typer.Option("--associate-min-score", help="Minimum association score to accept"),
     ] = None,
 ) -> None:
     """Edit a memory — pick by row number or ID (interactive picker if no arg)."""
@@ -1523,6 +1810,28 @@ def edit(
 
     if updated:
         console.print(f"  [bold {_P}]✓[/bold {_P}]  Saved [bold]{updated['id']}[/bold] → [bold]{new_category}[/bold]")
+        semantic_changed = (
+            new_content.strip() != str(mem.get("content", "")).strip()
+            or sorted(new_tags) != sorted([str(t).strip() for t in mem.get("tags", [])])
+            or new_category.strip() != str(mem.get("category", "")).strip()
+        )
+        association = load_association_policy(root)
+        should_associate, resolved_top, resolved_min = resolve_association_run(
+            association,
+            stage="edit",
+            auto_associate=auto_associate,
+            associate_top=associate_top,
+            associate_min_score=associate_min_score,
+        )
+        if semantic_changed and should_associate:
+            _auto_associate_entry(
+                root,
+                updated,
+                interactive_mode=False,
+                associate_top=resolved_top,
+                associate_min_score=resolved_min,
+                quiet_no_matches=True,
+            )
     else:
         err_console.print(f"[red]Update failed — spell not found.[/red]")
         raise typer.Exit(code=1)
@@ -1542,6 +1851,18 @@ def sync(
         bool,
         typer.Option("--export/--no-export", help="Export AI context files after sync"),
     ] = True,
+    auto_associate: Annotated[
+        Optional[bool],
+        typer.Option("--auto-associate/--no-auto-associate", help="Automatically link imported memories to related existing memories"),
+    ] = None,
+    associate_top: Annotated[
+        Optional[int],
+        typer.Option("--associate-top", help="Maximum number of related memories to attach"),
+    ] = None,
+    associate_min_score: Annotated[
+        Optional[float],
+        typer.Option("--associate-min-score", help="Minimum association score to accept"),
+    ] = None,
 ) -> None:
     """Import shared CHRONICLE.md entries into the local .lore store."""
     from .chronicle import import_chronicle
@@ -1561,6 +1882,28 @@ def sync(
         with console.status("Indexing imported memories…"):
             batch_index_memories(root, stats["indexed_pairs"])
 
+    linked_total = 0
+    if not dry_run and stats["indexed_pairs"]:
+        association = load_association_policy(root)
+        should_associate, resolved_top, resolved_min = resolve_association_run(
+            association,
+            stage="sync",
+            auto_associate=auto_associate,
+            associate_top=associate_top,
+            associate_min_score=associate_min_score,
+        )
+        if should_associate:
+            with console.status("Linking imported memories…"):
+                for mem_id, _ in stats["indexed_pairs"]:
+                    linked_total += _auto_associate_entry(
+                        root,
+                        {"id": mem_id},
+                        interactive_mode=False,
+                        associate_top=resolved_top,
+                        associate_min_score=resolved_min,
+                        quiet_no_matches=True,
+                    )
+
     mode = "(dry run) " if dry_run else ""
     console.print(
         f"[green]{mode}Sync complete.[/green] "
@@ -1568,6 +1911,8 @@ def sync(
         f"skipped duplicates [bold]{stats['skipped_duplicates']}[/bold], "
         f"recognized [bold]{stats['recognized']}[/bold] bullets."
     )
+    if not dry_run:
+        console.print(f"[dim]Auto-linked relationships:[/dim] [bold]{linked_total}[/bold]")
 
     if stats["skipped_unknown_section"]:
         console.print(
@@ -1600,6 +1945,18 @@ def extract(
         bool,
         typer.Option("--export", help="Also export AI context files after saving (avoids a second process startup)"),
     ] = False,
+    auto_associate: Annotated[
+        Optional[bool],
+        typer.Option("--auto-associate/--no-auto-associate", help="Automatically link extracted memories to related existing memories"),
+    ] = None,
+    associate_top: Annotated[
+        Optional[int],
+        typer.Option("--associate-top", help="Maximum number of related memories to attach"),
+    ] = None,
+    associate_min_score: Annotated[
+        Optional[float],
+        typer.Option("--associate-min-score", help="Minimum association score to accept"),
+    ] = None,
 ) -> None:
     """Extract memory candidates from git commit history."""
     from .extract import extract_from_git
@@ -1640,7 +1997,30 @@ def extract(
         with console.status("Indexing…"):
             batch_index_memories(root, to_index)
 
+    linked_total = 0
+    if to_index:
+        association = load_association_policy(root)
+        should_associate, resolved_top, resolved_min = resolve_association_run(
+            association,
+            stage="extract",
+            auto_associate=auto_associate,
+            associate_top=associate_top,
+            associate_min_score=associate_min_score,
+        )
+        if should_associate:
+            with console.status("Linking extracted memories…"):
+                for mem_id, _ in to_index:
+                    linked_total += _auto_associate_entry(
+                        root,
+                        {"id": mem_id},
+                        interactive_mode=False,
+                        associate_top=resolved_top,
+                        associate_min_score=resolved_min,
+                        quiet_no_matches=True,
+                    )
+
     console.print(f"\n[green]Saved {saved} memory(s).[/green]")
+    console.print(f"[dim]Auto-linked relationships:[/dim] [bold]{linked_total}[/bold]")
 
     if do_export:
         from .export import export_all
@@ -2766,6 +3146,22 @@ def awaken(
         float,
         typer.Option("--debounce", help="Seconds to wait after last change before re-exporting"),
     ] = 1.5,
+    sync_chronicle: Annotated[
+        Optional[bool],
+        typer.Option("--sync-chronicle/--no-sync-chronicle", help="Watch CHRONICLE.md and sync imports automatically"),
+    ] = None,
+    associate: Annotated[
+        Optional[bool],
+        typer.Option("--associate/--no-associate", help="Automatically create high-confidence related links while watching"),
+    ] = None,
+    associate_top: Annotated[
+        Optional[int],
+        typer.Option("--associate-top", help="Maximum number of related memories to attach per watched change"),
+    ] = None,
+    associate_min_score: Annotated[
+        Optional[float],
+        typer.Option("--associate-min-score", help="Minimum association score to accept during watch mode"),
+    ] = None,
 ) -> None:
     """Awaken the spellbook — watch .lore and auto-export AI context on every change."""
     import os
@@ -2774,8 +3170,21 @@ def awaken(
     from datetime import datetime, timezone
     from rich.live import Live
     from .daemon import run_spellbook, SpellbookState, SpellbookStatus, daemonize, pid_file
+    from .config import load_config
 
     root = _require_root()
+    cfg = load_config(root)
+    sync_enabled = bool(cfg.get("auto_sync_chronicle", True)) if sync_chronicle is None else bool(sync_chronicle)
+
+    association = load_association_policy(root)
+    watch_associate, resolved_top, resolved_min = resolve_association_run(
+        association,
+        stage="watch",
+        auto_associate=associate,
+        associate_top=associate_top,
+        associate_min_score=associate_min_score,
+    )
+
     pf = pid_file(root)
 
     # Guard: refuse if a daemon is already awake.
@@ -2796,7 +3205,14 @@ def awaken(
         if not hasattr(os, "fork"):
             err_console.print("[red]Background mode requires POSIX (macOS / Linux).[/red]")
             raise typer.Exit(code=1)
-        daemonize(root, debounce=debounce)
+        daemonize(
+            root,
+            debounce=debounce,
+            sync_chronicle=sync_enabled,
+            associate_on_watch=watch_associate,
+            associate_top=resolved_top,
+            associate_min_score=resolved_min,
+        )
         console.print(
             f"\n  [bold {_P}]✓[/bold {_P}]  The spellbook stirs in the shadows.\n"
             f"  [dim]Run [bold]lore slumber[/bold] to put it to rest.[/dim]\n"
@@ -2850,7 +3266,14 @@ def awaken(
     daemon_thread = threading.Thread(
         target=run_spellbook,
         args=(root, debounce),
-        kwargs={"on_state_change": _on_state_change, "stop_event": stop_event},
+        kwargs={
+            "on_state_change": _on_state_change,
+            "stop_event": stop_event,
+            "sync_chronicle": sync_enabled,
+            "associate_on_watch": watch_associate,
+            "associate_top": resolved_top,
+            "associate_min_score": resolved_min,
+        },
         daemon=True,
     )
     daemon_thread.start()

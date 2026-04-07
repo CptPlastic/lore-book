@@ -623,6 +623,28 @@ You can also override per run:
 lore awaken --no-sync-chronicle
 ```
 
+Automatic memory linking can be configured globally in `.lore/config.yaml`:
+
+```yaml
+association:
+  enabled: true
+  auto_apply_min_score: 0.55
+  suggest_min_score: 0.35
+  max_links_per_memory: 3
+  stages:
+    add: true
+    edit: true
+    sync: true
+    extract: true
+    watch: false
+```
+
+Watch-mode linking is available but off by default:
+
+```sh
+lore awaken --associate
+```
+
 ## Updates
 
 ```sh
@@ -802,6 +824,11 @@ Run `lore doctor` to confirm the model downloads and loads from your endpoint.
 | `remove` | `<id>` | Delete a spell |
 | `extract` | `[--last N]` | Pull spells from git commit messages |
 | `sync` | `[--file PATH] [--dry-run] [--no-export]` | Import shared `CHRONICLE.md` entries into local `.lore/` |
+| `associate-audit` | `[--hub-threshold N]` | Audit graph quality: dangling refs, one-way links, hubs, and orphans |
+| `associate-relink` | `[--ids CSV] [--top N] [--min-score F] [--apply]` | Recompute related links for all or selected spells (dry-run by default) |
+| `associate-prune` | `[--min-score F] [--min-age-days N] [--apply]` | Prune weak stale links using score and age gates (dry-run by default) |
+| `associate-heal` | `[--apply]` | Fix one-way links by adding reverse links with same scores (dry-run by default) |
+| `associate-repair` | `[--apply]` | Full graph repair: heal one-way links, prune stale, audit and recommend (dry-run by default) |
 | `export` | `[--format F]` | Write AI context files (`chronicle`, `agents`, `copilot`, `cursor`, `claude`, `prompt`, `windsurf`, `gemini`, `cline`, `aider`, `all`) |
 | `config` | `<key> <value>` | Set a config value |
 | `security` | | Configure the security preamble for exports |
@@ -815,7 +842,7 @@ Run `lore doctor` to confirm the model downloads and loads from your endpoint.
 | `index rebuild` | | Rebuild the semantic search index from scratch |
 | `version` | `[--check]` | Show installed lore version and optionally check PyPI |
 | `update` | `[--check-only] [--yes]` | Check for a new version and optionally install it |
-| `awaken` | `[--background] [--debounce S] [--sync-chronicle/--no-sync-chronicle]` | Watch `.lore` for export and optionally sync `CHRONICLE.md` changes |
+| `awaken` | `[--background] [--debounce S] [--sync-chronicle/--no-sync-chronicle] [--associate/--no-associate] [--associate-top N] [--associate-min-score F]` | Watch `.lore` for export, optionally sync `CHRONICLE.md`, and optionally auto-link high-confidence related memories |
 | `ui` | | Open the interactive terminal browser |
 | `slumber` | | Stop the background daemon |
 | `relic capture` | `[--file F] [--git-diff] [--git-log N] [--clipboard] [--stdin] [--title T] [--tags T]` | Capture a raw artifact |

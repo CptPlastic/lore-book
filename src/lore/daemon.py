@@ -14,6 +14,19 @@ from typing import Callable
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
+from .associations import apply_related_links, suggest_for_entry
+
+
+def _memory_id_from_event_path(src_path: str) -> str | None:
+    path = Path(src_path)
+    if path.suffix != ".yaml":
+        return None
+    stem = path.stem
+    if "_" not in stem:
+        return None
+    mem_id = stem.rsplit("_", 1)[-1].strip()
+    return mem_id or None
+
 
 class SpellbookStatus(str, Enum):
     IDLE = "idle"
@@ -98,6 +111,9 @@ def run_spellbook(
     on_state_change: Callable[[SpellbookState], None] | None = None,
     stop_event: threading.Event | None = None,
     sync_chronicle: bool = True,
+    associate_on_watch: bool = False,
+    associate_top: int = 3,
+    associate_min_score: float = 0.55,
 ) -> None:
     """Start the spellbook daemon loop — blocks until stop_event is set.
 
@@ -118,18 +134,39 @@ def run_spellbook(
     state = SpellbookState(status=SpellbookStatus.WATCHING)
     chronicle_path = root / "CHRONICLE.md"
     ignore_chronicle_until = 0.0
+    ignore_association_until = 0.0
 
     def _notify() -> None:
         if on_state_change:
             on_state_change(state)
 
     def _do_export(src_path: str) -> None:
-        nonlocal ignore_chronicle_until
+        nonlocal ignore_chronicle_until, ignore_association_until
         state.status = SpellbookStatus.CASTING
         state.last_scroll = Path(src_path).name
         _notify()
         try:
             export_all(root)
+
+            if associate_on_watch and time.time() >= ignore_association_until:
+                mem_id = _memory_id_from_event_path(src_path)
+                if mem_id:
+                    suggestions = suggest_for_entry(
+                        root,
+                        entry_id=mem_id,
+                        top_k=associate_top,
+                        min_score=associate_min_score,
+                    )
+                    if suggestions:
+                        applied = _apply_related_links(
+                            root,
+                            mem_id,
+                            [str(item.get("id", "")) for item in suggestions],
+                        )
+                        if applied:
+                            # Prevent immediate recursive retriggers from association writes.
+                            ignore_association_until = time.time() + max(2.0, debounce * 2)
+
             ignore_chronicle_until = time.time() + max(2.0, debounce * 2)
             state.cast_count += 1
             state.last_cast = datetime.now(timezone.utc)
@@ -151,9 +188,9 @@ def run_spellbook(
         _notify()
         try:
             stats = import_chronicle(root, chronicle_path, dry_run=False)
-            added = int(stats.get("added", 0) or 0)
-            if added:
-                batch_index_memories(root, added)
+            indexed_pairs = stats.get("indexed_pairs") or []
+            if indexed_pairs:
+                batch_index_memories(root, indexed_pairs)
             export_all(root)
             ignore_chronicle_until = time.time() + max(2.0, debounce * 2)
             state.cast_count += 1
@@ -191,7 +228,14 @@ def run_spellbook(
         _notify()
 
 
-def daemonize(root: Path, debounce: float = 1.5, sync_chronicle: bool = True) -> None:
+def daemonize(
+    root: Path,
+    debounce: float = 1.5,
+    sync_chronicle: bool = True,
+    associate_on_watch: bool = False,
+    associate_top: int = 3,
+    associate_min_score: float = 0.55,
+) -> None:
     """Fork into background, detach from terminal, and write PID file.
 
     The calling process returns immediately after the first fork so the
@@ -229,7 +273,14 @@ def daemonize(root: Path, debounce: float = 1.5, sync_chronicle: bool = True) ->
     signal.signal(signal.SIGTERM, _on_sigterm)
 
     try:
-        run_spellbook(root, debounce=debounce, sync_chronicle=sync_chronicle)
+        run_spellbook(
+            root,
+            debounce=debounce,
+            sync_chronicle=sync_chronicle,
+            associate_on_watch=associate_on_watch,
+            associate_top=associate_top,
+            associate_min_score=associate_min_score,
+        )
     finally:
         pf.unlink(missing_ok=True)
         os._exit(0)

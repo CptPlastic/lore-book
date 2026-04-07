@@ -92,6 +92,20 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # When `lore awaken` is running, also watch CHRONICLE.md and import changes.
     # Disable with: lore config auto_sync_chronicle false
     "auto_sync_chronicle": True,
+    # Association automation policy used by add/edit/sync/extract/watch flows.
+    "association": {
+        "enabled": True,
+        "auto_apply_min_score": 0.55,
+        "suggest_min_score": 0.35,
+        "max_links_per_memory": 3,
+        "stages": {
+            "add": True,
+            "edit": True,
+            "sync": True,
+            "extract": True,
+            "watch": False,
+        },
+    },
     # Security preamble injected into all AI context file exports:
     "security": {
         "enabled": False,
