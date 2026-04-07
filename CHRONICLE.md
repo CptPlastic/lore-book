@@ -82,6 +82,10 @@ Sync documentation and CHRONICLE notes with recent feature and reliability chang
 
 Prevent recursive hook invocation by adding a re-entry guard and shared lock for lore-managed git hooks. Hooks now check LORE_HOOK_ACTIVE and create a .git/.lore-hook.lock directory, set a trap to remove it on exit, and export LORE_HOOK_ACTIVE when invoking lore subcommands; the background commit hook and post-merge CHRONICLE sync hook were updated accordingly. README and CHRONICLE.md were updated to document the behavior and keep docs aligned with the CLI/hook changes. _(trust: low 50)_
 - Add re-entry guard to git hooks _(trust: low 50)_
+- Avoid no-op chronicle sync and fix related link call
+
+Call the public apply_related_links function (remove usage of internal _apply_related_links) and add a no-op early return after import_chronicle when nothing was added or indexed to avoid CHRONICLE self-trigger loops. Move the casting status/last_scroll update to occur only when real work was done, and only set/notify WATCHING in finally if the status actually changed. _(trust: low 50)_
+- Avoid no-op chronicle sync and fix related link call _(trust: low 50)_
 
 ## Summaries
 
