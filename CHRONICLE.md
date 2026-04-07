@@ -78,6 +78,10 @@ Sync documentation and CHRONICLE notes with recent feature and reliability chang
 - Add PyPI publish job and CHRONICLE notes _(trust: low 50)_
 - Add association automation and CLI commands _(trust: low 50)_
 - Add scripts/prepare_release.py and .github/workflows/release.yml: workflow + helper to bump or set versions, generate/update CHANGELOG.md, write release notes, tag, and create a GitHub Release (outputs version/tag for Actions). _(trust: low 50)_
+- Add re-entry guard to git hooks
+
+Prevent recursive hook invocation by adding a re-entry guard and shared lock for lore-managed git hooks. Hooks now check LORE_HOOK_ACTIVE and create a .git/.lore-hook.lock directory, set a trap to remove it on exit, and export LORE_HOOK_ACTIVE when invoking lore subcommands; the background commit hook and post-merge CHRONICLE sync hook were updated accordingly. README and CHRONICLE.md were updated to document the behavior and keep docs aligned with the CLI/hook changes. _(trust: low 50)_
+- Add re-entry guard to git hooks _(trust: low 50)_
 
 ## Summaries
 
