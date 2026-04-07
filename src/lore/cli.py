@@ -2261,9 +2261,13 @@ def hook_sync_install() -> None:
     preview = "\n".join([
         "#!/bin/sh",
         "# Installed by lore -- chronicle sync",
+        "# Re-entry guard: avoids recursive runs when multiple lore hooks are installed.",
+        "if [ \"${LORE_HOOK_ACTIVE:-}\" = \"1\" ]; then exit 0; fi",
+        "if ! mkdir .git/.lore-hook.lock 2>/dev/null; then exit 0; fi",
+        "trap 'rmdir .git/.lore-hook.lock 2>/dev/null' EXIT INT TERM",
         "if git diff --name-only ORIG_HEAD HEAD | grep -q '^CHRONICLE.md$'; then",
-        "  lore sync --no-export >/dev/null 2>&1",
-        "  lore export >/dev/null 2>&1",
+        "  LORE_HOOK_ACTIVE=1 lore sync --no-export >/dev/null 2>&1",
+        "  LORE_HOOK_ACTIVE=1 lore export >/dev/null 2>&1",
         "fi",
         "",
     ])

@@ -553,6 +553,9 @@ The generated hook is clearly marked `# Installed by lore`. Remove it safely wit
 lore hook uninstall
 ```
 
+Lore-managed hooks include a re-entry guard and shared lock (`.git/.lore-hook.lock`) so running both
+post-commit and post-merge hooks does not recurse.
+
 ### Post-merge CHRONICLE sync hook
 
 Install a post-merge hook that syncs shared `CHRONICLE.md` updates into local `.lore/` whenever pull/merge changes the chronicle:

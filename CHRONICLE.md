@@ -57,6 +57,27 @@ These changes enable optional automatic updating and safe CI/daemon-driven CHRON
 - Add association automation and CLI commands
 
 Introduce a new associations subsystem for automated related-memory linking: add src/lore/associations.py with policy loading, suggestion resolution, apply_related_links, audit, relink, prune, heal, repair, and recommendation helpers. Integrate association features into the CLI (src/lore/cli.py): new commands (associate-audit, associate-relink, associate-prune, associate-heal, associate-repair), options for awaken/add/edit/sync/extract/watch flows, and use association defaults to drive auto-linking and dry-run/apply semantics. Update daemon (src/lore/daemon.py) to optionally run association linking on watched changes without causing recursive triggers. Add default association config to DEFAULT_CONFIG (src/lore/config.py) and document configuration and new CLI flags in README.md. Include unit tests for associations (tests/test_associations.py) and a compiled pycache entry. _(trust: low 50)_
+- Document CLI additions and CHRONICLE updates
+
+Sync documentation and CHRONICLE notes with recent feature and reliability changes. CHRONICLE.md was updated (date bump, typographic fixes, trust level adjustments) and expanded to document: CHRONICLE import/sync and release automation (including publish job), lore-only commit skipping, identity validation and auto-repair, auto-update/daemon sync behavior, and the new associations subsystem. docs/index.html now lists the new `lore edit` and `lore sync` commands and exposes association health commands. site/cli/index.html gains navigation and usage examples for Association Health, One-Time Upgrade Workflow, and Full Auto Repair. These changes keep docs aligned with implemented CLI, daemon, and CI features and improve operational clarity. _(trust: low 50)_
+- Skip lore-generated files in git extraction _(trust: low 50)_
+- Validate and auto-repair identity on startup _(trust: low 50)_
+- CLI: factor PyPI lookup into _latest_pypi_version(), use it for version checks, and add an `update` command that can install the latest lore-book via pip. Add help entries for update/awaken. _(trust: low 50)_
+- Add post-merge hook install/uninstall helpers in src/lore/extract.py; the hook runs lore sync/export only when CHRONICLE.md changed. _(trust: low 50)_
+- Docs: update README and CHRONICLE.md to document the new publish job, removal of commit validation in the release workflow, auto-update options, and CHRONICLE auto-sync behavior. _(trust: low 50)_
+- Document CLI additions and CHRONICLE updates _(trust: low 50)_
+- Update README.md with docs for the CHRONICLE sync hooks, the new lore sync command, and the automated release workflow. _(trust: low 50)_
+- Daemon/awaken: add a --sync-chronicle/--no-sync-chronicle flag and read a new auto_sync_chronicle config; pass sync setting into daemonize/run_spellbook. Display chronicle sync status in awaken output. _(trust: low 50)_
+- Daemon: extend file event handler to watch CHRONICLE.md (optionally) and YAML files separately, schedule separate debounces, call import_chronicle and batch index newly added memories, and avoid feedback loops with an ignore timer. _(trust: low 50)_
+- Add CLI sync command and hook subcommands in src/lore/cli.py to import CHRONICLE entries, index them, optionally export context files, and manage a post-merge sync hook. _(trust: low 50)_
+- Add auto-update and CHRONICLE sync daemon _(trust: low 50)_
+- Add CHRONICLE sync & automated releases _(trust: low 50)_
+- Remove commit validation; update CHRONICLE _(trust: low 50)_
+- Config: add DEFAULT_CONFIG keys auto_update and auto_sync_chronicle with documentation comments. _(trust: low 50)_
+- Add src/lore/chronicle.py: conservative CHRONICLE.md importer with section parsing, export-suffix stripping (trust/scope/tags), deduplication, dry-run support, and indexing helpers. _(trust: low 50)_
+- Add PyPI publish job and CHRONICLE notes _(trust: low 50)_
+- Add association automation and CLI commands _(trust: low 50)_
+- Add scripts/prepare_release.py and .github/workflows/release.yml: workflow + helper to bump or set versions, generate/update CHANGELOG.md, write release notes, tag, and create a GitHub Release (outputs version/tag for Actions). _(trust: low 50)_
 
 ## Summaries
 

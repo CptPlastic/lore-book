@@ -225,7 +225,11 @@ def install_git_hook(root: Path, auto_export: bool = False) -> Path:
         "#!/bin/sh",
         "# Installed by lore -- https://github.com/HORIZON/memory",
         "# Runs in background so commits return instantly.",
-        f'({cmd} >> "$HOME/.lore-hook.log" 2>&1) &',
+        "# Re-entry guard: avoids recursive runs when multiple lore hooks are installed.",
+        "(if [ \"${LORE_HOOK_ACTIVE:-}\" = \"1\" ]; then exit 0; fi; "
+        "if ! mkdir .git/.lore-hook.lock 2>/dev/null; then exit 0; fi; "
+        "trap 'rmdir .git/.lore-hook.lock 2>/dev/null' EXIT INT TERM; "
+        f'LORE_HOOK_ACTIVE=1 {cmd} >> "$HOME/.lore-hook.log" 2>&1) &',
         "",  # trailing newline
     ]
 
@@ -270,9 +274,13 @@ def install_post_merge_sync_hook(root: Path) -> Path:
     lines = [
         "#!/bin/sh",
         "# Installed by lore -- chronicle sync",
+        "# Re-entry guard: avoids recursive runs when multiple lore hooks are installed.",
+        "if [ \"${LORE_HOOK_ACTIVE:-}\" = \"1\" ]; then exit 0; fi",
+        "if ! mkdir .git/.lore-hook.lock 2>/dev/null; then exit 0; fi",
+        "trap 'rmdir .git/.lore-hook.lock 2>/dev/null' EXIT INT TERM",
         "if git diff --name-only ORIG_HEAD HEAD | grep -q '^CHRONICLE.md$'; then",
-        "  lore sync --no-export >/dev/null 2>&1",
-        "  lore export >/dev/null 2>&1",
+        "  LORE_HOOK_ACTIVE=1 lore sync --no-export >/dev/null 2>&1",
+        "  LORE_HOOK_ACTIVE=1 lore export >/dev/null 2>&1",
         "fi",
         "",  # trailing newline
     ]
