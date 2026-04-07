@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.4.3 - 2026-04-07
+
+### Fixes
+- use PYTHONPATH-based version check to avoid quote parsing errors
+- detect nested sdist root before pip install
+
+### Other
+- Add association automation and CLI commands
+- Merge branch 'main' of https://github.com/CptPlastic/lore-book
+- Merge branch 'main' of https://github.com/CptPlastic/lore-book
+- Add auto-update and CHRONICLE sync daemon
+
 ## v1.4.2 - 2026-04-05
 
 ### Features
