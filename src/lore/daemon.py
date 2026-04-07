@@ -158,7 +158,7 @@ def run_spellbook(
                         min_score=associate_min_score,
                     )
                     if suggestions:
-                        applied = _apply_related_links(
+                        applied = apply_related_links(
                             root,
                             mem_id,
                             [str(item.get("id", "")) for item in suggestions],
@@ -183,12 +183,20 @@ def run_spellbook(
         if time.time() < ignore_chronicle_until:
             return
 
-        state.status = SpellbookStatus.CASTING
-        state.last_scroll = Path(src_path).name
-        _notify()
         try:
             stats = import_chronicle(root, chronicle_path, dry_run=False)
             indexed_pairs = stats.get("indexed_pairs") or []
+
+            # No-op sync: do not export, cast, or bump counters.
+            # This avoids CHRONICLE self-trigger loops when the file changed
+            # but yielded no new memories to import.
+            if int(stats.get("added", 0)) <= 0 and not indexed_pairs:
+                return
+
+            state.status = SpellbookStatus.CASTING
+            state.last_scroll = Path(src_path).name
+            _notify()
+
             if indexed_pairs:
                 batch_index_memories(root, indexed_pairs)
             export_all(root)
@@ -198,8 +206,9 @@ def run_spellbook(
         except Exception as exc:
             state.errors.append(str(exc))
         finally:
-            state.status = SpellbookStatus.WATCHING
-            _notify()
+            if state.status != SpellbookStatus.WATCHING:
+                state.status = SpellbookStatus.WATCHING
+                _notify()
 
     watch_path = str(memory_dir(root))
     handler = _LoreEventHandler(
