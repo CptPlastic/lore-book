@@ -243,14 +243,42 @@
           <div class="incantation"><span class="cmd">lore awaken</span><br><span class="cmd">lore awaken</span> <span class="arg">--background</span><br><span class="cmd">lore slumber</span></div>
         </div>
         <div class="feature-card">
-          <h3>Health Check</h3>
-          <p>Verify store readability, semantic search mode, endpoint reachability, and spell counts in one command.</p>
-          <div class="incantation"><span class="cmd">lore doctor</span></div>
+          <h3>Health Check & Auto-Repair</h3>
+          <p>Verify and repair store health with machine-readable JSON output. Run health checks in strict mode, set model timeouts, or apply automatic fixes.</p>
+          <div class="incantation"><span class="cmd">lore doctor</span><br><span class="cmd">lore doctor</span> <span class="arg">--json</span><br><span class="cmd">lore doctor</span> <span class="arg">--json-compact --strict</span><br><span class="cmd">lore doctor</span> <span class="arg">--fix</span></div>
         </div>
         <div class="feature-card">
           <h3>Release Smoke Test</h3>
           <p>Run a clean isolated CLI smoke test before publishing to catch packaging and command regressions.</p>
           <div class="incantation"><span class="cmd">./smoke.sh</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ AUTOMATION & CI ══ -->
+    <section class="parchment">
+      <h2><span class="rune">⚙</span> Automation & CI</h2>
+      <p>Lore commands now emit machine-readable JSON for scripting and CI pipelines. Check health, lint, search, and list operate in strict mode. Auto-repair broken stores without manual intervention.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>Health Checks in CI</h3>
+          <p>Gate deployments on store health. Use compact JSON and strict mode for fail-fast CI workflows.</p>
+          <div class="incantation"><span class="cmd">lore doctor</span> <span class="arg">--json-compact --strict</span><br><span class="cmd">lore doctor</span> <span class="arg">--model-timeout 8</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>Searchable Output</h3>
+          <p>Get structured JSON results for programmatic search and filtering.</p>
+          <div class="incantation"><span class="cmd">lore search</span> <span class="arg">"query" --json</span><br><span class="cmd">lore search</span> <span class="arg">"query" --json-compact</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>Quality Gates</h3>
+          <p>Lint and list also support JSON. Combine with jq or other tools for custom assertions.</p>
+          <div class="incantation"><span class="cmd">lore lint</span> <span class="arg\">--json</span><br><span class=\"cmd\">lore list</span> <span class=\"arg\">decisions --json-compact</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>Auto-Repair Workflows</h3>
+          <p>Detect problems and apply fixes automatically. Preview changes with --fix-dry-run before committing.</p>
+          <div class="incantation"><span class="cmd">lore doctor</span> <span class="arg\">--fix-dry-run --json</span><br><span class=\"cmd\">lore doctor</span> <span class=\"arg\">--fix</span></div>
         </div>
       </div>
     </section>
@@ -261,11 +289,11 @@
       <div class="command-columns">
         <div class="command-item">
           <strong>Store</strong>
-          <p><code>lore onboard</code>, <code>lore init</code>, <code>lore add</code>, <code>lore edit</code>, <code>lore associate</code>, <code>lore list</code>, <code>lore remove</code></p>
+          <p><code>lore onboard</code>, <code>lore init</code>, <code>lore add</code>, <code>lore edit</code>, <code>lore associate</code>, <code>lore list</code>, <code>lore list --json</code>, <code>lore remove</code></p>
         </div>
         <div class="command-item">
           <strong>Search</strong>
-          <p><code>lore search &lt;query&gt;</code>, <code>lore index rebuild</code>, <code>lore setup semantic</code>, <code>lore setup extract-patterns</code></p>
+          <p><code>lore search &lt;query&gt;</code>, <code>lore search &lt;query&gt; --json</code>, <code>lore index rebuild</code>, <code>lore setup semantic</code>, <code>lore setup extract-patterns</code></p>
         </div>
         <div class="command-item">
           <strong>Relics</strong>
@@ -277,7 +305,7 @@
         </div>
         <div class="command-item">
           <strong>Trust and Security</strong>
-          <p><code>lore security</code>, <code>lore lint</code>, <code>lore trust refresh</code>, <code>lore trust explain &lt;id&gt;</code></p>
+          <p><code>lore security</code>, <code>lore lint</code>, <code>lore lint --json</code>, <code>lore trust refresh</code>, <code>lore trust explain &lt;id&gt;</code></p>
         </div>
         <div class="command-item">
           <strong>Automation</strong>
