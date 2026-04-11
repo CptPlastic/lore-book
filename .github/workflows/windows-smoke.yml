@@ -43,6 +43,11 @@ jobs:
           lore trust refresh --dry-run
           lore export --format chronicle
 
+          $doctor = lore doctor --json-compact | ConvertFrom-Json
+          if ($doctor.status -eq "error") {
+            throw "lore doctor returned error status"
+          }
+
           if (-not (Test-Path (Join-Path $testRepo "CHRONICLE.md"))) {
             throw "CHRONICLE.md was not generated"
           }

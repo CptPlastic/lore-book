@@ -749,6 +749,24 @@ The daemon watches `.lore/` with filesystem events and regenerates all export fi
 
 ```sh
 lore doctor
+
+# Pretty machine-readable report
+lore doctor --json
+
+# Compact one-line JSON for CI logs/parsers
+lore doctor --json-compact
+
+# Fail unless status is healthy
+lore doctor --json --strict
+
+# Bound semantic probe runtime (seconds)
+lore doctor --json --model-timeout 8
+
+# Apply safe automatic repairs before reporting
+lore doctor --fix
+
+# Preview repairs without applying them
+lore doctor --fix-dry-run --json
 ```
 
 Reports:
@@ -756,6 +774,47 @@ Reports:
 - Which semantic search mode is active (embedding model or TF-IDF fallback)
 - Whether the configured model endpoint is reachable
 - Counts of spells by tome and relics
+
+JSON output includes a top-level `status` field for easy automation:
+- `healthy` - store exists and semantic search is active
+- `degraded` - store exists but semantic model is unavailable (TF-IDF fallback)
+- `error` - store missing or doctor could not run required checks
+
+Doctor JSON also includes `recommended_action` so scripts and users can surface the next best command automatically.
+
+`lore doctor --fix` applies only safe automatic remediations:
+- initialize a missing `.lore/` store in the current directory
+- repair missing or invalid identity metadata
+- rebuild the semantic index
+- export current AI context files
+- install the lore post-commit hook when inside a git repo and no hook exists yet
+
+Use `lore doctor --fix-dry-run` to preview these actions without modifying the repo.
+
+Automation-friendly JSON is also available on core operational commands:
+
+```sh
+lore list --json
+lore search "auth strategy" --json-compact
+lore lint --json
+```
+
+CI gating examples:
+
+```sh
+# Fail only on hard errors
+lore doctor --json-compact | jq -e '.status != "error"' >/dev/null
+
+# Fail on anything except healthy
+lore doctor --json --strict
+```
+
+PowerShell (Windows CI):
+
+```powershell
+$report = lore doctor --json-compact | ConvertFrom-Json
+if ($report.status -eq "error") { throw "lore doctor failed" }
+```
 
 ## Release smoke test
 
@@ -822,8 +881,8 @@ Run `lore doctor` to confirm the model downloads and loads from your endpoint.
 | `onboard` | | Guided setup — concepts, store, security, first spell, export |
 | `init` | `[path]` | Create a `.lore/` store in a directory |
 | `add` | `[category] [content]` | Store a spell (interactive if no args) |
-| `list` | `[category]` | List spells, optionally filtered by tome |
-| `search` | `<query>` | Semantic search across all spells |
+| `list` | `[category] [--json] [--json-compact]` | List spells, optionally filtered by tome |
+| `search` | `<query> [--top N] [--json] [--json-compact]` | Semantic search across all spells |
 | `remove` | `<id>` | Delete a spell |
 | `extract` | `[--last N]` | Pull spells from git commit messages |
 | `sync` | `[--file PATH] [--dry-run] [--no-export]` | Import shared `CHRONICLE.md` entries into local `.lore/` |
@@ -835,7 +894,8 @@ Run `lore doctor` to confirm the model downloads and loads from your endpoint.
 | `export` | `[--format F]` | Write AI context files (`chronicle`, `agents`, `copilot`, `cursor`, `claude`, `prompt`, `windsurf`, `gemini`, `cline`, `aider`, `all`) |
 | `config` | `<key> <value>` | Set a config value |
 | `security` | | Configure the security preamble for exports |
-| `doctor` | | Store + model health report |
+| `doctor` | `[--json] [--json-compact] [--strict] [--fix] [--fix-dry-run] [--model-timeout S]` | Store + model health report with optional safe auto-remediation |
+| `lint` | `[--fail-on LEVELS] [--json] [--json-compact]` | Check memory quality and optionally emit machine-readable findings |
 | `trust refresh` | `[--dry-run]` | Recompute trust scores/levels from git + memory metadata |
 | `trust explain` | `<id> [--recompute]` | Show trust signals and scoring reasons for one memory |
 | `hook install` | | Install git post-commit hook (wizard) |

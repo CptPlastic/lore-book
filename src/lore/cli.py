@@ -66,6 +66,19 @@ app.add_typer(setup_app, name="setup")
 app.add_typer(trust_app, name="trust")
 
 
+def _latest_pypi_version(timeout: int = 5) -> str | None:
+    """Return latest version from PyPI, or None when unavailable."""
+    try:
+        import json as _json
+        import urllib.request
+
+        with urllib.request.urlopen("https://pypi.org/pypi/lore-book/json", timeout=timeout) as resp:  # noqa: S310
+            data = _json.loads(resp.read())
+        return str(data.get("info", {}).get("version", "")).strip() or None
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # lore version
 # ---------------------------------------------------------------------------
@@ -80,23 +93,17 @@ def version(
     """Show the current lore version and optionally check for updates."""
     console.print(f"lore [bold]{__version__}[/bold]")
     if check:
-        try:
-            import urllib.request
-            import json as _json
-            url = "https://pypi.org/pypi/lore-book/json"
-            with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
-                data = _json.loads(resp.read())
-            latest = data["info"]["version"]
-            if latest == __version__:
-                console.print(f"[dim]You are up to date.[/dim]")
-            else:
-                console.print(
-                    f"[bold {_A}]A new version is available:[/bold {_A}] [bold]{latest}[/bold]  "
-                    f"[dim](you have {__version__})[/dim]\n"
-                    f"  [dim]Run: [bold]python -m pip install --upgrade lore-book[/bold][/dim]"
-                )
-        except Exception:
-            console.print(f"[dim]Could not reach PyPI to check for updates.[/dim]")
+        latest = _latest_pypi_version(timeout=5)
+        if latest is None:
+            console.print("[dim]Could not reach PyPI to check for updates.[/dim]")
+        elif latest == __version__:
+            console.print("[dim]You are up to date.[/dim]")
+        else:
+            console.print(
+                f"[bold {_A}]A new version is available:[/bold {_A}] [bold]{latest}[/bold]  "
+                f"[dim](you have {__version__})[/dim]\n"
+                f"  [dim]Run: [bold]python -m pip install --upgrade lore-book[/bold][/dim]"
+            )
 
 console     = Console(color_system=_color_system, force_terminal=_force_color)
 err_console = Console(stderr=True, color_system=_color_system, force_terminal=_force_color)
@@ -181,21 +188,13 @@ def _root(
 
     # Background update check — non-blocking, silent on error or up-to-date.
     def _check_update() -> None:
-        try:
-            import urllib.request
-            import json as _json
-            with urllib.request.urlopen(  # noqa: S310
-                "https://pypi.org/pypi/lore-book/json", timeout=3
-            ) as resp:
-                latest = _json.loads(resp.read())["info"]["version"]
-            if latest != __version__:
-                console.print(
-                    f"  [{_A}]✦  Update available:[/{_A}] [bold]{latest}[/bold]"
-                    f"  [dim](you have {__version__})[/dim]\n"
-                    f"  [dim]  python -m pip install --upgrade lore-book[/dim]\n"
-                )
-        except Exception:
-            pass
+        latest = _latest_pypi_version(timeout=3)
+        if latest and latest != __version__:
+            console.print(
+                f"  [{_A}]✦  Update available:[/{_A}] [bold]{latest}[/bold]"
+                f"  [dim](you have {__version__})[/dim]\n"
+                f"  [dim]  python -m pip install --upgrade lore-book[/dim]\n"
+            )
 
     import threading as _threading
     _threading.Thread(target=_check_update, daemon=True).start()
@@ -279,6 +278,21 @@ def _print_association_table(suggestions: list[dict[str, Any]]) -> None:
             _preview(str(item.get("content", ""))),
         )
     console.print(table)
+
+
+def _print_empty_state(title: str, hints: list[str]) -> None:
+    console.print(f"[yellow]{title}[/yellow]")
+    for hint in hints:
+        console.print(f"[dim]{hint}[/dim]")
+
+
+def _emit_json_payload(payload: dict[str, Any], compact: bool = False) -> None:
+    import json as _json
+
+    if compact:
+        typer.echo(_json.dumps(payload, sort_keys=True, separators=(",", ":")))
+    else:
+        typer.echo(_json.dumps(payload, indent=2, sort_keys=True))
 
 
 def _interactive_add_inputs(root: Path) -> tuple[str, str, str | None, str | None, str | None, bool, str | None]:
@@ -1007,14 +1021,48 @@ def list_cmd(
         Optional[str],
         typer.Argument(help="Filter by category (omit to show all)"),
     ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Output a machine-readable JSON list"),
+    ] = False,
+    json_compact: Annotated[
+        bool,
+        typer.Option("--json-compact", help="Emit compact one-line JSON (implies --json)"),
+    ] = False,
 ) -> None:
     """List stored memories."""
     from .store import list_memories
 
+    as_json = as_json or json_compact
     root = _require_root()
     memories = list_memories(root, category)
+    if as_json:
+        _emit_json_payload(
+            {
+                "category": category,
+                "count": len(memories),
+                "items": memories,
+            },
+            json_compact,
+        )
+        return
     if not memories:
-        console.print("[yellow]No memories found.[/yellow]")
+        if category:
+            _print_empty_state(
+                f"No memories found in '{category}'.",
+                [
+                    f"Add one with [bold]lore add {category} \"...\"[/bold].",
+                    "Run [bold]lore list[/bold] to see all tomes with content.",
+                ],
+            )
+        else:
+            _print_empty_state(
+                "No memories found.",
+                [
+                    "Capture your first spell with [bold]lore add[/bold].",
+                    "If you are new here, run [bold]lore onboard[/bold] for guided setup.",
+                ],
+            )
         return
 
     table = Table(show_header=True, header_style="bold magenta", expand=True)
@@ -1047,6 +1095,14 @@ def lint_cmd(
             help="Comma-separated severities that should cause non-zero exit (error,warning)",
         ),
     ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Output a machine-readable JSON lint report"),
+    ] = False,
+    json_compact: Annotated[
+        bool,
+        typer.Option("--json-compact", help="Emit compact one-line JSON (implies --json)"),
+    ] = False,
 ) -> None:
     """Check memory quality for duplicates, stale entries, and metadata integrity."""
     from datetime import date
@@ -1054,12 +1110,29 @@ def lint_cmd(
     from .config import load_config
     from .store import list_memories
 
+    as_json = as_json or json_compact
     root = _require_root()
     cfg = load_config(root)
     memories = list_memories(root)
 
     if not memories:
-        console.print("[yellow]No memories found.[/yellow]")
+        if as_json:
+            _emit_json_payload(
+                {
+                    "count": 0,
+                    "findings": [],
+                    "summary": {"error": 0, "warning": 0},
+                },
+                json_compact,
+            )
+            return
+        _print_empty_state(
+            "No memories found.",
+            [
+                "Add a spell with [bold]lore add[/bold] before running lint.",
+                "Try [bold]lore doctor[/bold] if you expected an existing store to be loaded.",
+            ],
+        )
         return
 
     valid_ids = {str(m.get("id", "")) for m in memories if m.get("id")}
@@ -1132,7 +1205,7 @@ def lint_cmd(
         "warning": f"bold {_A}",
     }
 
-    if findings:
+    if findings and not as_json:
         table = Table(show_header=True, header_style=f"bold {_A}", expand=True)
         table.add_column("Severity", width=10, no_wrap=True)
         table.add_column("ID", style="dim", width=10, no_wrap=True)
@@ -1142,16 +1215,29 @@ def lint_cmd(
             label.stylize(severity_style.get(severity, ""))
             table.add_row(label, mem_id, message)
         console.print(table)
-    else:
+    elif not as_json:
         console.print(f"[bold {_P}]No lint issues found.[/bold {_P}]")
 
     counts = {
         "error": sum(1 for sev, _, _ in findings if sev == "error"),
         "warning": sum(1 for sev, _, _ in findings if sev == "warning"),
     }
-    console.print(
-        f"[dim]Lint summary:[/dim] errors={counts['error']} warnings={counts['warning']}"
-    )
+    if as_json:
+        _emit_json_payload(
+            {
+                "count": len(findings),
+                "findings": [
+                    {"severity": severity, "id": mem_id, "issue": message}
+                    for severity, mem_id, message in findings
+                ],
+                "summary": counts,
+            },
+            json_compact,
+        )
+    else:
+        console.print(
+            f"[dim]Lint summary:[/dim] errors={counts['error']} warnings={counts['warning']}"
+        )
 
     fail_levels = {s.strip().lower() for s in (fail_on or "").split(",") if s.strip()}
     if any(sev in fail_levels for sev, _, _ in findings):
@@ -1169,16 +1255,47 @@ def search(
         int,
         typer.Option("--top", "-k", help="Number of results to return"),
     ] = 5,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Output machine-readable JSON search results"),
+    ] = False,
+    json_compact: Annotated[
+        bool,
+        typer.Option("--json-compact", help="Emit compact one-line JSON (implies --json)"),
+    ] = False,
 ) -> None:
     """Semantic search over stored memories."""
     from .search import search as do_search
 
+    as_json = as_json or json_compact
     root = _require_root()
-    with console.status("Searching…"):
+    if as_json:
         results = do_search(root, query, top_k=top)
+    else:
+        with console.status("Searching…"):
+            results = do_search(root, query, top_k=top)
+
+    if as_json:
+        _emit_json_payload(
+            {
+                "query": query,
+                "top": top,
+                "count": len(results),
+                "results": results,
+            },
+            json_compact,
+        )
+        return
 
     if not results:
-        console.print("[yellow]No results found.[/yellow]")
+        _print_empty_state(
+            f"No results found for '{query}'.",
+            [
+                "Try a broader phrase or fewer specific keywords.",
+                "Run [bold]lore list[/bold] to inspect what is already stored.",
+                "Add the missing context with [bold]lore add[/bold] if this knowledge is not captured yet.",
+            ],
+        )
         return
 
     table = Table(show_header=True, header_style="bold blue", expand=True)
@@ -1223,7 +1340,13 @@ def associate(
     root = _require_root()
     memories = list_memories(root)
     if not memories:
-        console.print("[yellow]No memories found.[/yellow]")
+        _print_empty_state(
+            "No memories found.",
+            [
+                "Add at least two spells with [bold]lore add[/bold] before looking for associations.",
+                "Run [bold]lore add facts \"...\"[/bold] to seed the graph quickly.",
+            ],
+        )
         return
 
     try:
@@ -2983,32 +3106,147 @@ def security() -> None:
 # ---------------------------------------------------------------------------
 
 @app.command()
-def doctor() -> None:
+def doctor(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Output a machine-readable JSON status report"),
+    ] = False,
+    json_compact: Annotated[
+        bool,
+        typer.Option("--json-compact", help="Emit compact one-line JSON (implies --json)"),
+    ] = False,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict", help="Exit non-zero unless doctor status is healthy"),
+    ] = False,
+    fix: Annotated[
+        bool,
+        typer.Option("--fix", help="Apply safe automatic fixes before reporting status"),
+    ] = False,
+    fix_dry_run: Annotated[
+        bool,
+        typer.Option("--fix-dry-run", help="Preview what doctor --fix would change without applying it"),
+    ] = False,
+    model_timeout: Annotated[
+        float,
+        typer.Option("--model-timeout", min=0.5, help="Seconds to wait for semantic model check"),
+    ] = 15.0,
+) -> None:
     """Check lore setup — model, store, config, and search mode."""
+    import json as _json
+
     from .config import find_memory_root, load_config, memory_dir
 
-    console.print(Panel(_BANNER_TEXT, border_style=_BD, padding=(0, 2), style=f"on {_BG}"))
-    console.print()
+    as_json = as_json or json_compact
+    fix_requested = fix or fix_dry_run
+
+    def _emit_report(payload: dict[str, Any]) -> None:
+        if json_compact:
+            typer.echo(_json.dumps(payload, sort_keys=True, separators=(",", ":")))
+        else:
+            typer.echo(_json.dumps(payload, indent=2, sort_keys=True))
+
+    if not as_json:
+        console.print(Panel(_BANNER_TEXT, border_style=_BD, padding=(0, 2), style=f"on {_BG}"))
+        console.print()
 
     ok  = f"[bold {_P}]✓[/bold {_P}]"
     warn = f"[bold {_A}]▲[/bold {_A}]"
     err  = f"[bold red]✗[/bold red]"
 
+    report: dict[str, Any] = {
+        "ok": False,
+        "degraded": False,
+        "status": "error",
+        "recommended_action": None,
+        "fixes_applied": [],
+        "fixes_planned": [],
+        "store": {},
+        "git": {},
+        "config": {},
+        "spells": {},
+        "model": {},
+    }
+
     # --- Store ---
     root = find_memory_root()
+    if root is None and fix_dry_run:
+        report["fixes_planned"].extend(["initialized_store", "exported_context_files"])
+    if root is None and fix:
+        from .export import export_all
+        from .store import init_store
+
+        root = Path.cwd().resolve()
+        init_store(root)
+        export_all(root)
+        report["fixes_applied"].extend(["initialized_store", "exported_context_files"])
+
     if root:
         mdir = memory_dir(root)
         cfg  = load_config(root)
-        console.print(f"  {ok}  Store found at [bold]{mdir}[/bold]")
+        report["store"] = {
+            "found": True,
+            "root": str(root),
+            "path": str(mdir),
+        }
+        if not as_json:
+            console.print(f"  {ok}  Store found at [bold]{mdir}[/bold]")
         identity = cfg.get("identity", {})
         ident_name = identity.get("name", "")
         ident_id = identity.get("id", "")
+        report["store"]["identity"] = {
+            "name": ident_name,
+            "id": ident_id,
+            "present": bool(ident_name and ident_id),
+        }
         if ident_name and ident_id:
-            console.print(
-                f"  {ok}  Identity       : "
-                f"[bold {_A}]{ident_name}[/bold {_A}]  [dim]({ident_id})[/dim]"
-            )
+            if not as_json:
+                console.print(
+                    f"  {ok}  Identity       : "
+                    f"[bold {_A}]{ident_name}[/bold {_A}]  [dim]({ident_id})[/dim]"
+                )
+
+        if fix_requested:
+            from .export import export_all
+            from .extract import _is_git_repo, install_git_hook
+            from .search import rebuild_index
+            from .store import ensure_identity
+
+            repaired, identity = ensure_identity(root)
+            if repaired:
+                if fix:
+                    report["fixes_applied"].append("repaired_identity")
+                    report["store"]["identity"] = {
+                        "name": identity.get("name", ""),
+                        "id": identity.get("id", ""),
+                        "present": bool(identity.get("name") and identity.get("id")),
+                    }
+                else:
+                    report["fixes_planned"].append("repaired_identity")
+
+            if fix:
+                rebuild_index(root)
+                report["fixes_applied"].append("rebuilt_index")
+
+                export_all(root)
+                report["fixes_applied"].append("exported_context_files")
+            else:
+                report["fixes_planned"].extend(["rebuilt_index", "exported_context_files"])
+
+            hook_path = root / ".git" / "hooks" / "post-commit"
+            if _is_git_repo(root) and not hook_path.exists():
+                if fix:
+                    install_git_hook(root, auto_export=False)
+                    report["fixes_applied"].append("installed_post_commit_hook")
+                else:
+                    report["fixes_planned"].append("installed_post_commit_hook")
     else:
+        report["store"] = {"found": False, "error": "No .lore store found"}
+        report["status"] = "error"
+        report["recommended_action"] = "run lore doctor --fix or lore init ."
+        if as_json:
+            _emit_report(report)
+            raise typer.Exit(code=1)
         console.print(f"  {err}  No .lore store found.")
         console.print(f"       Run [bold]lore init[/bold] first, then re-run [bold]lore doctor[/bold].")
         console.print(f"\n       [{_AD}]Model and config checks are skipped until the store exists.[/{_AD}]")
@@ -3017,7 +3255,8 @@ def doctor() -> None:
 
     # --- Git ---
     from .extract import _is_git_repo, git_context
-    console.print()
+    if not as_json:
+        console.print()
     if _is_git_repo(root):
         ctx = git_context(root)
         branch = ctx.get("branch", "unknown")
@@ -3026,38 +3265,59 @@ def doctor() -> None:
         last_sha = ctx.get("last_sha")
         last_msg = ctx.get("last_msg", "")
         repo_label = remote or root.name
-        console.print(f"  {ok}  Git repo        : [bold]{repo_label}[/bold]")
-        console.print(f"  {ok}  Branch          : [bold]{branch}[/bold]")
-        if author:
-            console.print(f"  {ok}  Author          : [bold]{author}[/bold]")
-        if last_sha:
-            short_msg = last_msg[:60] + ("…" if len(last_msg) > 60 else "")
-            console.print(f"  {ok}  Last commit     : [dim]{last_sha}[/dim] {short_msg}")
+        report["git"] = {
+            "is_repo": True,
+            "repo_label": repo_label,
+            "branch": branch,
+            "author": author,
+            "last_sha": last_sha,
+            "last_msg": last_msg,
+        }
+        if not as_json:
+            console.print(f"  {ok}  Git repo        : [bold]{repo_label}[/bold]")
+            console.print(f"  {ok}  Branch          : [bold]{branch}[/bold]")
+            if author:
+                console.print(f"  {ok}  Author          : [bold]{author}[/bold]")
+            if last_sha:
+                short_msg = last_msg[:60] + ("…" if len(last_msg) > 60 else "")
+                console.print(f"  {ok}  Last commit     : [dim]{last_sha}[/dim] {short_msg}")
         hook_path = root / ".git" / "hooks" / "post-commit"
-        if hook_path.exists() and "# Installed by lore" in hook_path.read_text():
-            console.print(f"  {ok}  Post-commit hook: [bold]installed[/bold]")
-        else:
-            console.print(f"  {warn}  Post-commit hook: [dim]not installed[/dim]  "
-                          f"[{_AD}]→ run [bold {_P}]lore hook install[/bold {_P}][/{_AD}]")
+        hook_installed = hook_path.exists() and "# Installed by lore" in hook_path.read_text()
+        report["git"]["post_commit_hook_installed"] = hook_installed
+        if not as_json:
+            if hook_installed:
+                console.print(f"  {ok}  Post-commit hook: [bold]installed[/bold]")
+            else:
+                console.print(f"  {warn}  Post-commit hook: [dim]not installed[/dim]  "
+                              f"[{_AD}]→ run [bold {_P}]lore hook install[/bold {_P}][/{_AD}]")
     else:
-        console.print(f"  {warn}  Git repo        : [bold {_A}]not a git repository[/bold {_A}]")
-        console.print(f"       [{_AD}][bold]lore extract[/bold] and [bold]lore hook[/bold] require git.[/{_AD}]")
+        report["git"] = {"is_repo": False}
+        if not as_json:
+            console.print(f"  {warn}  Git repo        : [bold {_A}]not a git repository[/bold {_A}]")
+            console.print(f"       [{_AD}][bold]lore extract[/bold] and [bold]lore hook[/bold] require git.[/{_AD}]")
 
     # --- Config values ---
     endpoint   = cfg.get("model_endpoint") or "https://huggingface.co"
     ssl_verify = cfg.get("model_ssl_verify", True)
     model_name = cfg.get("embedding_model", "all-MiniLM-L6-v2")
-    console.print(f"  {ok}  Embedding model : [bold]{model_name}[/bold]")
-    console.print(f"  {ok}  Model endpoint  : [bold]{endpoint}[/bold]")
-    console.print(f"       [{_AD}]→ If behind a proxy run:[/{_AD}] "
-                  f"[bold {_P}]lore config model_endpoint <url>[/bold {_P}]")
-    if not ssl_verify:
-        console.print(f"  {warn}  SSL verify      : [bold red]disabled[/bold red]")
-    else:
-        console.print(f"  {ok}  SSL verify      : enabled")
+    report["config"] = {
+        "embedding_model": model_name,
+        "model_endpoint": endpoint,
+        "model_ssl_verify": bool(ssl_verify),
+    }
+    if not as_json:
+        console.print(f"  {ok}  Embedding model : [bold]{model_name}[/bold]")
+        console.print(f"  {ok}  Model endpoint  : [bold]{endpoint}[/bold]")
+        console.print(f"       [{_AD}]→ If behind a proxy run:[/{_AD}] "
+                      f"[bold {_P}]lore config model_endpoint <url>[/bold {_P}]")
+        if not ssl_verify:
+            console.print(f"  {warn}  SSL verify      : [bold red]disabled[/bold red]")
+        else:
+            console.print(f"  {ok}  SSL verify      : enabled")
 
     # --- Spell counts + instructions nudge ---
-    console.print()
+    if not as_json:
+        console.print()
     from .store import list_memories
     all_mems = list_memories(root)
     by_cat: dict[str, int] = {}
@@ -3065,56 +3325,148 @@ def doctor() -> None:
         cat = m.get("category", "?")
         by_cat[cat] = by_cat.get(cat, 0) + 1
     total = sum(by_cat.values())
-    if total:
-        counts = "  ".join(f"[dim]{c}[/dim] {n}" for c, n in sorted(by_cat.items()))
-        console.print(f"  {ok}  Spells ({total})    : {counts}")
-    else:
-        console.print(f"  {warn}  No spells stored yet. Run [bold]lore add[/bold] to capture your first memory.")
-    if not by_cat.get("instructions"):
-        console.print(
-            f"  {warn}  No [bold]instructions[/bold] spells — "
-            f"[{_AD}]these become per-tool directives in your AI files.[/{_AD}]\n"
-            f"       [{_AD}]→ run [bold {_P}]lore instructions[/bold {_P}] to add one[/{_AD}]"
-        )
+    report["spells"] = {
+        "total": total,
+        "by_category": by_cat,
+        "has_instructions": bool(by_cat.get("instructions")),
+    }
+    if not as_json:
+        if total:
+            counts = "  ".join(f"[dim]{c}[/dim] {n}" for c, n in sorted(by_cat.items()))
+            console.print(f"  {ok}  Spells ({total})    : {counts}")
+        else:
+            console.print(f"  {warn}  No spells stored yet. Run [bold]lore add[/bold] to capture your first memory.")
+        if not by_cat.get("instructions"):
+            console.print(
+                f"  {warn}  No [bold]instructions[/bold] spells — "
+                f"[{_AD}]these become per-tool directives in your AI files.[/{_AD}]\n"
+                f"       [{_AD}]→ run [bold {_P}]lore instructions[/bold {_P}] to add one[/{_AD}]"
+            )
 
     # --- Model availability ---
-    console.print()
-    console.print(f"  [{_A}]Checking model…[/{_A}]", end=" ")
-    try:
-        import logging, warnings, os, sys
-        for n in ("huggingface_hub", "sentence_transformers", "urllib3", "tqdm"):
-            logging.getLogger(n).setLevel(logging.CRITICAL)
-        warnings.filterwarnings("ignore")
-        os.environ.setdefault("TQDM_DISABLE", "1")
-        if endpoint:
-            os.environ["HF_ENDPOINT"] = endpoint.rstrip("/")
-        if not ssl_verify:
-            import ssl
-            ssl._create_default_https_context = ssl._create_unverified_context  # noqa: SLF001
-        # Redirect stdout+stderr briefly to swallow the BERT LOAD REPORT
-        from io import StringIO
-        _old_out, _old_err = sys.stdout, sys.stderr
-        sys.stdout = sys.stderr = StringIO()
+    if not as_json:
+        console.print()
+        console.print(f"  [{_A}]Checking model…[/{_A}]", end=" ")
+    import queue as _queue
+    import threading as _threading
+    import time as _time
+
+    model_result: _queue.Queue[tuple[bool, str | None]] = _queue.Queue(maxsize=1)
+
+    def _model_probe() -> None:
         try:
+            import logging
+            import os
+            import warnings
+
+            for n in ("huggingface_hub", "sentence_transformers", "urllib3", "tqdm"):
+                logging.getLogger(n).setLevel(logging.CRITICAL)
+            warnings.filterwarnings("ignore")
+            os.environ.setdefault("TQDM_DISABLE", "1")
+            if endpoint:
+                os.environ["HF_ENDPOINT"] = endpoint.rstrip("/")
+            if not ssl_verify:
+                import ssl
+
+                ssl._create_default_https_context = ssl._create_unverified_context  # noqa: SLF001
+
             from sentence_transformers import SentenceTransformer
+
             SentenceTransformer(model_name)
-        finally:
-            sys.stdout, sys.stderr = _old_out, _old_err
-        console.print(f"[bold {_P}]semantic search active ✓[/bold {_P}]")
-        console.print(f"\n  {ok}  [bold]lore is fully operational.[/bold]")
-    except Exception as exc:
-        console.print(f"[bold {_A}]unavailable[/bold {_A}]")
-        console.print(f"  {warn}  Falling back to TF-IDF search (no embeddings).")
-        console.print(f"       [{_AD}]Reason: {exc}[/{_AD}]")
-        if "No module named 'sentence_transformers'" in str(exc):
-            console.print(f"\n       [{_A}]To fix:[/{_A}] install semantic dependencies:")
-            console.print( "       [bold]pip install \"lore-book[semantic]\"[/bold]")
-            console.print( "       [dim]or run [bold]lore setup semantic[/bold] for guided setup.[/dim]")
+            model_result.put((True, None))
+        except Exception as exc:  # pragma: no cover - covered by doctor tests via mocked module
+            model_result.put((False, str(exc)))
+
+    started_at = _time.perf_counter()
+    probe_thread = _threading.Thread(target=_model_probe, daemon=True)
+    probe_thread.start()
+    probe_thread.join(timeout=model_timeout)
+    elapsed = _time.perf_counter() - started_at
+
+    timed_out = probe_thread.is_alive()
+    if timed_out:
+        reason = f"Model check timed out after {model_timeout:.1f}s"
+        report["model"] = {
+            "semantic_search_active": False,
+            "fallback_tfidf": True,
+            "reason": reason,
+            "timed_out": True,
+            "check_seconds": round(elapsed, 3),
+            "timeout_seconds": float(model_timeout),
+        }
+        if not as_json:
+            console.print(f"[bold {_A}]timeout[/bold {_A}]")
+            console.print(f"  {warn}  Falling back to TF-IDF search (semantic check timed out).")
+            console.print(f"       [{_AD}]Reason: {reason}[/{_AD}]")
+    else:
+        semantic_active, reason = model_result.get_nowait()
+        report["model"] = {
+            "semantic_search_active": bool(semantic_active),
+            "fallback_tfidf": not bool(semantic_active),
+            "reason": reason,
+            "timed_out": False,
+            "check_seconds": round(elapsed, 3),
+            "timeout_seconds": float(model_timeout),
+        }
+        if semantic_active:
+            if not as_json:
+                console.print(f"[bold {_P}]semantic search active ✓[/bold {_P}]")
+                console.print(f"\n  {ok}  [bold]lore is fully operational.[/bold]")
+        elif not as_json:
+            console.print(f"[bold {_A}]unavailable[/bold {_A}]")
+            console.print(f"  {warn}  Falling back to TF-IDF search (no embeddings).")
+            console.print(f"       [{_AD}]Reason: {reason}[/{_AD}]")
+            if reason and "No module named 'sentence_transformers'" in reason:
+                console.print(f"\n       [{_A}]To fix:[/{_A}] install semantic dependencies:")
+                console.print("       [bold]pip install \"lore-book[semantic]\"[/bold]")
+                console.print("       [dim]or run [bold]lore setup semantic[/bold] for guided setup.[/dim]")
+            else:
+                console.print(f"\n       [{_A}]To fix:[/{_A}] set [bold]model_endpoint[/bold] to an "
+                              "accessible HuggingFace mirror,")
+                console.print("       or set [bold]model_ssl_verify false[/bold] if SSL is the only blocker.")
+
+    report["degraded"] = not bool(report.get("model", {}).get("semantic_search_active"))
+    report["ok"] = bool(report.get("store", {}).get("found"))
+    if not report["ok"]:
+        report["status"] = "error"
+    elif report["degraded"]:
+        report["status"] = "degraded"
+    else:
+        report["status"] = "healthy"
+
+    if not report["store"].get("found"):
+        report["recommended_action"] = "run lore doctor --fix or lore init ."
+    elif report["spells"].get("total", 0) == 0:
+        report["recommended_action"] = "run lore add"
+    elif not report["spells"].get("has_instructions"):
+        report["recommended_action"] = "run lore instructions"
+    elif report["git"].get("is_repo") and not report["git"].get("post_commit_hook_installed"):
+        report["recommended_action"] = "run lore hook install"
+    elif report["degraded"]:
+        reason = str(report["model"].get("reason") or "")
+        if report["model"].get("timed_out"):
+            report["recommended_action"] = f"rerun lore doctor --model-timeout {max(30, int(model_timeout * 2))}"
+        elif "No module named 'sentence_transformers'" in reason:
+            report["recommended_action"] = "run lore setup semantic or install lore-book[semantic]"
         else:
-            console.print(f"\n       [{_A}]To fix:[/{_A}] set [bold]model_endpoint[/bold] to an "
-                          "accessible HuggingFace mirror,")
-            console.print( "       or set [bold]model_ssl_verify false[/bold] if SSL is the only blocker.")
-    console.print()
+            report["recommended_action"] = "check model_endpoint or rerun lore doctor"
+    if as_json:
+        _emit_report(report)
+        if strict and report["status"] != "healthy":
+            raise typer.Exit(code=1)
+    else:
+        if fix and report["fixes_applied"]:
+            console.print()
+            console.print(f"  {ok}  Applied fixes     : [bold]{', '.join(report['fixes_applied'])}[/bold]")
+        elif fix_dry_run and report["fixes_planned"]:
+            console.print()
+            console.print(f"  {ok}  Planned fixes     : [bold]{', '.join(report['fixes_planned'])}[/bold]")
+        if report["recommended_action"]:
+            console.print(f"  {warn}  Recommended next : [bold]{report['recommended_action']}[/bold]")
+        console.print()
+        if strict and report["status"] != "healthy":
+            console.print(f"  {err}  Strict mode requires healthy status (current: [bold]{report['status']}[/bold]).")
+            raise typer.Exit(code=1)
 
 
 # ---------------------------------------------------------------------------
