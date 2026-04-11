@@ -27,6 +27,7 @@ CONVENTIONS.md
 dist/
 build/
 *.egg-info/
+site/  # stale pre-built docs; use docs/ as canonical source (served via GitHub Pages)
 
 # Local environment files
 .env

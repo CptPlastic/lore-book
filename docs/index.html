@@ -79,88 +79,22 @@
       <div class="note">Requirements: Python 3.10+. Dense vector search is optional. If model loading fails, Lore falls back to TF-IDF so search still works.</div>
     </section>
 
-    <!-- ══ NEW IN 1.4.1 ══ -->
+    <!-- ══ INCANTATIONS ══ -->
     <section class="parchment">
-      <h2><span class="rune">✹</span> New in 1.4.1: Auto Association</h2>
-      <p>Lore can now suggest and apply related-memory links automatically using semantic similarity plus tag/category hints.</p>
-      <div class="feature-grid">
-        <div class="feature-card">
-          <h3>Link While Writing</h3>
-          <p>Save a memory and have Lore propose nearby context links immediately.</p>
-          <div class="incantation"><span class="cmd">lore add</span> <span class="arg">decisions "..." --auto-associate</span></div>
-        </div>
-        <div class="feature-card">
-          <h3>Associate Existing Memory</h3>
-          <p>Run suggestions on any existing memory by ID, preview first, then apply if it looks right.</p>
-          <div class="incantation"><span class="cmd">lore associate</span> <span class="arg">&lt;id&gt;</span><br><span class="cmd">lore associate</span> <span class="arg">&lt;id&gt; --apply</span></div>
-        </div>
-        <div class="feature-card">
-          <h3>Tune the Matcher</h3>
-          <p>Control how many links are considered and how strict matching should be.</p>
-          <div class="incantation"><span class="cmd">lore add</span> <span class="arg">... --auto-associate --associate-top 5 --associate-min-score 0.30</span></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ══ NEW IN 1.4.0 ══ -->
-    <section class="parchment">
-      <h2><span class="rune">✺</span> New in 1.4.0: Context Keeper</h2>
-      <p>Lore now supports relationship metadata, memory linting, trust history, and configurable extraction patterns.</p>
-      <div class="feature-grid">
-        <div class="feature-card">
-          <h3>Metadata-Aware Spells</h3>
-          <p>Link memories together and set lifecycle metadata for review and deprecation.</p>
-          <div class="incantation"><span class="cmd">lore add</span><br><span class="cmd">lore edit</span> <span class="arg">&lt;id&gt;</span></div>
-        </div>
-        <div class="feature-card">
-          <h3>Quality Gate</h3>
-          <p>Run memory lint checks for duplicates, stale entries, broken references, and trust threshold warnings.</p>
-          <div class="incantation"><span class="cmd">lore lint</span><br><span class="cmd">lore lint</span> <span class="arg">--fail-on error,warning</span></div>
-        </div>
-        <div class="feature-card">
-          <h3>Trust History</h3>
-          <p>Refresh trust scores and inspect why a memory was scored that way, including recent score history.</p>
-          <div class="incantation"><span class="cmd">lore trust refresh</span><br><span class="cmd">lore trust explain</span> <span class="arg">&lt;id&gt;</span></div>
-        </div>
-        <div class="feature-card">
-          <h3>Smart Extraction Rules</h3>
-          <p>Teach Lore your commit conventions with regex or prefix patterns so extraction auto-categorizes entries.</p>
-          <div class="incantation"><span class="cmd">lore setup extract-patterns</span><br><span class="cmd">lore extract</span> <span class="arg">--last 20 --auto</span></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ══ EXPORT ARCHITECTURE ══ -->
-    <section class="parchment">
-      <h2><span class="rune">⌘</span> Export Architecture</h2>
-      <p>Lore uses a two-layer export model: one canonical chronicle, then thin instruction files that point back to it. That keeps token overhead low while preserving full project memory when needed.</p>
-      <div class="target-list">
-        <div class="target-item">
-          <strong>CHRONICLE.md</strong>
-          Complete project memory grouped by tome. This is the single source of truth.
-        </div>
-        <div class="target-item">
-          <strong>.github/copilot-instructions.md</strong>
-          Lean GitHub Copilot adapter with project summary, security preamble, and chronicle reference.
-        </div>
-        <div class="target-item">
-          <strong>AGENTS.md and CLAUDE.md</strong>
-          Small tool-specific adapters for Codex, agent frameworks, and Claude.
-        </div>
-        <div class="target-item">
-          <strong>.github/prompts/lore.prompt.md</strong>
-          Enables the <code>/lore</code> prompt in Copilot Chat to pull chronicle context on demand.
-        </div>
-        <div class="target-item">
-          <strong>Cursor, Gemini, Cline, Windsurf, Aider</strong>
-          Optional adapters you can keep enabled or disable through <code>.lore/config.yaml</code>.
-        </div>
-        <div class="target-item">
-          <strong>Atomic exports</strong>
-          Regeneration is all-or-nothing so a crash mid-write does not leave partial instruction files behind.
-        </div>
-      </div>
-      <div class="incantation"><span class="cmd">lore export</span><br><span class="cmd">lore export</span> <span class="arg">--format chronicle</span><br><span class="cmd">lore export</span> <span class="arg">--format prompt</span></div>
+      <h2><span class="rune">🜏</span> Incantations</h2>
+      <p>Ready to begin? Here are the spells to summon Lore into your realm.</p>
+      <h3>Install on Windows with Scoop</h3>
+      <div class="incantation"><span class="comment"># Preferred once the Scoop bucket is published</span><br><span class="cmd">scoop bucket add cptplastic</span> <span class="arg">https://github.com/CptPlastic/scoop-lore-book</span><br><span class="cmd">scoop install</span> <span class="arg">lore-book</span></div>
+      <h3>Install on Windows (easy path)</h3>
+      <div class="incantation"><span class="comment"># Use pipx for a clean CLI install</span><br><span class="cmd">py -m pip install --user pipx</span><br><span class="cmd">py -m pipx ensurepath</span><br><span class="cmd">pipx install lore-book</span></div>
+      <h3>Install from this repo on Windows</h3>
+      <div class="incantation"><span class="cmd">powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1</span></div>
+      <h3>Install via Homebrew</h3>
+      <div class="incantation"><span class="comment"># Bind the tap</span><br><span class="cmd">brew tap</span> <span class="arg">cptplastic/lore-book</span><br><span class="cmd">brew install</span> <span class="arg">lore-book</span></div>
+      <h3>Install via pip</h3>
+      <div class="incantation"><span class="cmd">python -m pip install</span> <span class="arg">lore-book</span></div>
+      <h3>Cast your first spells</h3>
+      <div class="incantation"><span class="comment"># Record a decision</span><br><span class="cmd">lore add</span> <span class="arg">decisions</span> <span class="arg">"Use PostgreSQL — we need JSONB and row-level locking"</span><br><br><span class="comment"># Record a fact</span><br><span class="cmd">lore add</span> <span class="arg">facts</span> <span class="arg">"Auth service is the sole issuer of JWTs — never bypass it"</span><br><br><span class="comment"># Publish to all AI instruction files</span><br><span class="cmd">lore export</span></div>
     </section>
 
     <!-- ══ THE SCRYING GLASS ══ -->
@@ -195,23 +129,6 @@
           <div class="incantation"><span class="cmd">lore relic distill</span> <span class="arg">&lt;id&gt;</span></div>
         </div>
       </div>
-    </section>
-
-    <!-- ══ INCANTATIONS ══ -->
-    <section class="parchment">
-      <h2><span class="rune">🜏</span> Incantations</h2>
-      <h3>Install on Windows with Scoop</h3>
-      <div class="incantation"><span class="comment"># Preferred once the Scoop bucket is published</span><br><span class="cmd">scoop bucket add cptplastic</span> <span class="arg">https://github.com/CptPlastic/scoop-lore-book</span><br><span class="cmd">scoop install</span> <span class="arg">lore-book</span></div>
-      <h3>Install on Windows (easy path)</h3>
-      <div class="incantation"><span class="comment"># Use pipx for a clean CLI install</span><br><span class="cmd">py -m pip install --user pipx</span><br><span class="cmd">py -m pipx ensurepath</span><br><span class="cmd">pipx install lore-book</span></div>
-      <h3>Install from this repo on Windows</h3>
-      <div class="incantation"><span class="cmd">powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1</span></div>
-      <h3>Install via Homebrew</h3>
-      <div class="incantation"><span class="comment"># Bind the tap</span><br><span class="cmd">brew tap</span> <span class="arg">cptplastic/lore-book</span><br><span class="cmd">brew install</span> <span class="arg">lore-book</span></div>
-      <h3>Install via pip</h3>
-      <div class="incantation"><span class="cmd">python -m pip install</span> <span class="arg">lore-book</span></div>
-      <h3>Cast your first spells</h3>
-      <div class="incantation"><span class="comment"># Record a decision</span><br><span class="cmd">lore add</span> <span class="arg">decisions</span> <span class="arg">"Use PostgreSQL — we need JSONB and row-level locking"</span><br><br><span class="comment"># Record a fact</span><br><span class="cmd">lore add</span> <span class="arg">facts</span> <span class="arg">"Auth service is the sole issuer of JWTs — never bypass it"</span><br><br><span class="comment"># Publish to all AI instruction files</span><br><span class="cmd">lore export</span></div>
     </section>
 
     <!-- ══ TRUST MODEL ══ -->
@@ -281,6 +198,39 @@
           <div class="incantation"><span class="cmd">lore doctor</span> <span class="arg\">--fix-dry-run --json</span><br><span class=\"cmd\">lore doctor</span> <span class=\"arg\">--fix</span></div>
         </div>
       </div>
+    </section>
+
+    <!-- ══ EXPORT ARCHITECTURE ══ -->
+    <section class="parchment">
+      <h2><span class="rune">⌘</span> Export Architecture</h2>
+      <p>Lore uses a two-layer export model: one canonical chronicle, then thin instruction files that point back to it. That keeps token overhead low while preserving full project memory when needed.</p>
+      <div class="target-list">
+        <div class="target-item">
+          <strong>CHRONICLE.md</strong>
+          Complete project memory grouped by tome. This is the single source of truth.
+        </div>
+        <div class="target-item">
+          <strong>.github/copilot-instructions.md</strong>
+          Lean GitHub Copilot adapter with project summary, security preamble, and chronicle reference.
+        </div>
+        <div class="target-item">
+          <strong>AGENTS.md and CLAUDE.md</strong>
+          Small tool-specific adapters for Codex, agent frameworks, and Claude.
+        </div>
+        <div class="target-item">
+          <strong>.github/prompts/lore.prompt.md</strong>
+          Enables the <code>/lore</code> prompt in Copilot Chat to pull chronicle context on demand.
+        </div>
+        <div class="target-item">
+          <strong>Cursor, Gemini, Cline, Windsurf, Aider</strong>
+          Optional adapters you can keep enabled or disable through <code>.lore/config.yaml</code>.
+        </div>
+        <div class="target-item">
+          <strong>Atomic exports</strong>
+          Regeneration is all-or-nothing so a crash mid-write does not leave partial instruction files behind.
+        </div>
+      </div>
+      <div class="incantation"><span class="cmd">lore export</span><br><span class="cmd">lore export</span> <span class="arg">--format chronicle</span><br><span class="cmd">lore export</span> <span class="arg">--format prompt</span></div>
     </section>
 
     <!-- ══ GRIMOIRE OF COMMANDS ══ -->
