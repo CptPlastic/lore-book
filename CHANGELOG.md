@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.6 - 2026-04-11
+
+### Other
+- JSON output, doctor improvements, tests
+- Condense CHRONICLE.md changelog entries
+- Merge branch 'main' of https://github.com/CptPlastic/lore-book
+- Document chronicle: avoid no-op sync & fix links
+
 ## v1.4.5 - 2026-04-07
 
 ### Other
