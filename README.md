@@ -648,6 +648,135 @@ Watch-mode linking is available but off by default:
 lore awaken --associate
 ```
 
+## Harmonize
+
+`harmonize` is the contradiction-checking and rollup feature.
+
+It does two things in one pass:
+- clusters closely related spells into candidate summary rollups
+- flags likely contradictions across spells in the same tome
+
+By default it is report-only and writes nothing.
+
+If you want a guided setup flow instead of editing YAML directly:
+
+```sh
+lore setup harmonize
+```
+
+### Basic usage
+
+```sh
+# Preview rollups + contradictions
+lore harmonize
+
+# Broaden candidate recall
+lore harmonize --min-score 0.50 --contradiction-min-confidence 0.60
+
+# Persist rollup summaries
+lore harmonize --apply
+
+# Persist rollups and contradiction-resolution suggestions
+lore harmonize --apply --apply-resolutions
+```
+
+The current implementation is intentionally conservative:
+- source spells are never overwritten
+- all harmonized output is appended as new `summaries` entries
+- created summaries are linked back to their source spells unless disabled
+
+### Watch mode
+
+Harmonize can also run from the daemon:
+
+```sh
+# Watch .lore and auto-create harmonized rollups
+lore awaken --harmonize
+
+# Also persist contradiction-resolution suggestions while watching
+lore awaken --harmonize --harmonize-apply-resolutions
+```
+
+This is disabled by default because background harmonization can create noisy summaries in fast-moving stores.
+
+### Tuning config
+
+Add a `harmonize` block to `.lore/config.yaml`:
+
+```yaml
+harmonize:
+  enabled: true
+  watch: false
+  top_k: 3
+  min_score: 0.62
+  max_rollups: 10
+  contradiction_min_confidence: 0.67
+  suggest_resolutions: true
+  apply_resolutions: false
+```
+
+Field meanings:
+- `enabled` - global on/off switch for harmonize features
+- `watch` - allow `lore awaken` to run harmonize automatically without passing `--harmonize`
+- `top_k` - how many related spells are considered per harmonize anchor
+- `min_score` - minimum association score required before a rollup candidate is proposed
+- `max_rollups` - cap on generated rollup candidates per run
+- `contradiction_min_confidence` - minimum confidence required before a contradiction is shown
+- `suggest_resolutions` - include resolution suggestions in report mode
+- `apply_resolutions` - when harmonize writes during watch mode, also persist resolution suggestions
+
+### Recommended presets
+
+For small, curated stores:
+
+```yaml
+harmonize:
+  top_k: 2
+  min_score: 0.70
+  max_rollups: 6
+  contradiction_min_confidence: 0.75
+  suggest_resolutions: true
+  apply_resolutions: false
+```
+
+Use this when the store is mostly high-signal and you want only the strongest findings.
+
+For medium team stores:
+
+```yaml
+harmonize:
+  top_k: 3
+  min_score: 0.62
+  max_rollups: 10
+  contradiction_min_confidence: 0.67
+  suggest_resolutions: true
+  apply_resolutions: false
+```
+
+This is the default balance for most repos.
+
+For noisy or rapidly changing stores:
+
+```yaml
+harmonize:
+  top_k: 4
+  min_score: 0.50
+  max_rollups: 15
+  contradiction_min_confidence: 0.58
+  suggest_resolutions: true
+  apply_resolutions: false
+```
+
+Use this when you want broader recall and are willing to review more false positives.
+
+### Practical guidance
+
+- Raise `min_score` if rollups are grouping unrelated spells.
+- Lower `min_score` if harmonize is missing obvious sibling spells.
+- Raise `contradiction_min_confidence` if contradiction reports feel noisy.
+- Lower `contradiction_min_confidence` if you want earlier warning on drifting facts.
+- Keep `apply_resolutions` off until your store has stable review habits.
+
 ## Updates
 
 ```sh
@@ -723,6 +852,7 @@ TUI keys:
 - `u` edit
 - `d` delete
 - `x` suggest/apply associations for selected spell
+- `h` run harmonize preview/apply (rollups + contradiction checks)
 - `g` dependency map
 - `e` export
 
@@ -736,6 +866,9 @@ lore awaken
 
 # Run in background
 lore awaken --background
+
+# Optional: auto-harmonize while watching
+lore awaken --harmonize
 
 # Stop the daemon
 lore slumber

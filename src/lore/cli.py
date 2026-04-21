@@ -121,6 +121,7 @@ _CORE_ROWS = [
 _MORE_ROWS = [
     ("list",          "\\[category]",             "list memories, optionally by tome"),
     ("lint",          "\\[--fail-on LEVELS]",      "check memory quality and metadata integrity"),
+    ("harmonize",     "[--apply] [--apply-resolutions]", "roll up related spells and detect contradictions"),
     ("associate",     "<id>",                   "suggest or apply related memory links"),
     ("associate-audit", "[--hub-threshold N]",   "inspect graph quality (orphans, one-way links, hubs)"),
     ("associate-relink", "[--apply] [--top N]",   "recompute links for all/selected memories"),
@@ -131,10 +132,11 @@ _MORE_ROWS = [
     ("init",          "\\[path]",                 "create a .lore store in a directory"),
     ("doctor",        "",                        "check store, model, and search status"),
     ("setup",         "semantic",                "guided setup for dense vector search"),
+    ("setup",         "harmonize",               "guided setup for harmonize rollups and contradiction checks"),
     ("setup",         "extract-patterns",        "manage custom extraction patterns for commits"),
     ("trust",         "refresh",                 "recompute memory trust from git signals"),
     ("trust",         "explain <id>",            "show trust score inputs for one memory"),
-    ("awaken",        "\\[--background] \\[--sync-chronicle] \\[--associate]", "👁  watch .lore, auto-export, optional sync/linking"),
+    ("awaken",        "\\[--background] \\[--sync-chronicle] \\[--associate] \\[--harmonize]", "👁  watch .lore, auto-export, optional sync/linking/harmonize"),
     ("slumber",       "",                        "banish the background daemon"),
     ("config",        "<key> <value>",           "set a config value"),
     ("security",      "",                        "configure security guidelines for exports"),
@@ -478,10 +480,7 @@ def _sync_existing_chronicle(root: Path) -> dict[str, object] | None:
 
 @app.command()
 def init(
-    path: Annotated[
-        Path,
-        typer.Argument(help="Directory to initialize (default: current directory)"),
-    ] = Path("."),
+    path: Path = typer.Argument(Path("."), help="Directory to initialize (default: current directory)"),
     extract: Annotated[
         bool,
         typer.Option("--extract", help="Also extract memories from recent git commits after init"),
@@ -910,14 +909,8 @@ def onboard() -> None:
 
 @app.command()
 def add(
-    category: Annotated[
-        Optional[str],
-        typer.Argument(help="Category: decisions, facts, preferences, summaries"),
-    ] = None,
-    content: Annotated[
-        Optional[str],
-        typer.Argument(help="Memory content to store"),
-    ] = None,
+    category: Optional[str] = typer.Argument(None, help="Category: decisions, facts, preferences, summaries"),
+    content: Optional[str] = typer.Argument(None, help="Memory content to store"),
     tags: Annotated[
         Optional[str],
         typer.Option("--tags", "-t", help="Comma-separated tags"),
@@ -1021,14 +1014,8 @@ def list_cmd(
         Optional[str],
         typer.Argument(help="Filter by category (omit to show all)"),
     ] = None,
-    as_json: Annotated[
-        bool,
-        typer.Option("--json", help="Output a machine-readable JSON list"),
-    ] = False,
-    json_compact: Annotated[
-        bool,
-        typer.Option("--json-compact", help="Emit compact one-line JSON (implies --json)"),
-    ] = False,
+    as_json: bool = typer.Option(False, "--json", help="Output a machine-readable JSON list"),
+    json_compact: bool = typer.Option(False, "--json-compact", help="Emit compact one-line JSON (implies --json)"),
 ) -> None:
     """List stored memories."""
     from .store import list_memories
@@ -1095,14 +1082,8 @@ def lint_cmd(
             help="Comma-separated severities that should cause non-zero exit (error,warning)",
         ),
     ] = None,
-    as_json: Annotated[
-        bool,
-        typer.Option("--json", help="Output a machine-readable JSON lint report"),
-    ] = False,
-    json_compact: Annotated[
-        bool,
-        typer.Option("--json-compact", help="Emit compact one-line JSON (implies --json)"),
-    ] = False,
+    as_json: bool = typer.Option(False, "--json", help="Output a machine-readable JSON lint report"),
+    json_compact: bool = typer.Option(False, "--json-compact", help="Emit compact one-line JSON (implies --json)"),
 ) -> None:
     """Check memory quality for duplicates, stale entries, and metadata integrity."""
     from datetime import date
@@ -1244,6 +1225,187 @@ def lint_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("harmonize")
+def harmonize_cmd(
+    top: Annotated[
+        int,
+        typer.Option("--top", help="Max related memories considered per rollup anchor"),
+    ] = 3,
+    min_score: Annotated[
+        float,
+        typer.Option("--min-score", help="Minimum association score for rollup candidates"),
+    ] = 0.62,
+    max_rollups: Annotated[
+        int,
+        typer.Option("--max-rollups", help="Maximum number of rollup candidates to include in report"),
+    ] = 20,
+    contradiction_min_confidence: Annotated[
+        float,
+        typer.Option("--contradiction-min-confidence", help="Minimum confidence to report contradiction findings"),
+    ] = 0.67,
+    suggest_resolutions: Annotated[
+        bool,
+        typer.Option("--suggest-resolutions/--no-suggest-resolutions", help="Include resolution suggestions for contradictions"),
+    ] = True,
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Persist rollup summaries (dry-run by default)"),
+    ] = False,
+    apply_resolutions: Annotated[
+        bool,
+        typer.Option("--apply-resolutions", help="Persist contradiction resolution suggestions as summaries (requires --apply)"),
+    ] = False,
+    link_sources: Annotated[
+        bool,
+        typer.Option("--link-sources/--no-link-sources", help="Link created harmonize summaries back to source memories"),
+    ] = True,
+    as_json: bool = typer.Option(False, "--json", help="Output a machine-readable harmonize report"),
+    json_compact: bool = typer.Option(False, "--json-compact", help="Emit compact one-line JSON (implies --json)"),
+) -> None:
+    """Roll up related spells and report likely contradictions."""
+    from .harmonize import apply_harmonize_report, generate_harmonize_report
+    from .search import batch_index_memories
+
+    as_json = as_json or json_compact
+    if apply_resolutions and not apply:
+        err_console.print("[red]--apply-resolutions requires --apply.[/red]")
+        raise typer.Exit(code=1)
+
+    root = _require_root()
+    if as_json:
+        report = generate_harmonize_report(
+            root,
+            top_k=max(1, int(top)),
+            min_score=max(0.0, min(1.0, float(min_score))),
+            max_rollups=max(1, int(max_rollups)),
+            contradiction_min_confidence=max(0.0, min(1.0, float(contradiction_min_confidence))),
+            include_resolution_suggestions=suggest_resolutions,
+        )
+    else:
+        with console.status("Harmonizing spells…"):
+            report = generate_harmonize_report(
+                root,
+                top_k=max(1, int(top)),
+                min_score=max(0.0, min(1.0, float(min_score))),
+                max_rollups=max(1, int(max_rollups)),
+                contradiction_min_confidence=max(0.0, min(1.0, float(contradiction_min_confidence))),
+                include_resolution_suggestions=suggest_resolutions,
+            )
+
+    if as_json:
+        _emit_json_payload(
+            {
+                "top": top,
+                "min_score": min_score,
+                "max_rollups": max_rollups,
+                "contradiction_min_confidence": contradiction_min_confidence,
+                "apply": apply,
+                "apply_resolutions": apply_resolutions,
+                **report,
+            },
+            json_compact,
+        )
+        if not apply:
+            return
+
+    summary = Table(show_header=True, header_style=f"bold {_A}", expand=False)
+    summary.add_column("Metric", style=f"bold {_P}")
+    summary.add_column("Value", justify="right")
+    summary.add_row("Memories scanned", str(report.get("memory_count", 0)))
+    summary.add_row("Rollup candidates", str(len(report.get("rollups", []))))
+    summary.add_row("Contradictions", str(len(report.get("contradictions", []))))
+    summary.add_row("Resolution suggestions", str(len(report.get("resolution_suggestions", []))))
+    console.print(summary)
+
+    rollups = report.get("rollups", [])
+    if rollups:
+        table = Table(show_header=True, header_style=f"bold {_A}", expand=True)
+        table.add_column("Score", width=7, no_wrap=True)
+        table.add_column("Category", width=12, no_wrap=True)
+        table.add_column("Sources", width=20, no_wrap=True)
+        table.add_column("Rollup", min_width=36, overflow="fold")
+        for item in rollups[:20]:
+            table.add_row(
+                f"{float(item.get('score', 0.0)):.3f}",
+                str(item.get("category", "")),
+                ", ".join(item.get("source_ids", [])),
+                str(item.get("content", "")),
+            )
+        console.print()
+        console.print(f"[bold {_A}]Rollup candidates[/bold {_A}] [dim](top 20)[/dim]")
+        console.print(table)
+
+    contradictions = report.get("contradictions", [])
+    if contradictions:
+        table = Table(show_header=True, header_style=f"bold {_A}", expand=True)
+        table.add_column("Confidence", width=10, no_wrap=True)
+        table.add_column("Type", width=10, no_wrap=True)
+        table.add_column("Pair", width=20, no_wrap=True)
+        table.add_column("Evidence", min_width=30, overflow="fold")
+        for item in contradictions[:20]:
+            evidence = (
+                f"{str(item.get('left_content', ''))[:70]}{'…' if len(str(item.get('left_content', ''))) > 70 else ''}"
+                " <-> "
+                f"{str(item.get('right_content', ''))[:70]}{'…' if len(str(item.get('right_content', ''))) > 70 else ''}"
+            )
+            table.add_row(
+                f"{float(item.get('confidence', 0.0)):.3f}",
+                str(item.get("type", "")),
+                f"{item.get('left_id', '')}, {item.get('right_id', '')}",
+                evidence,
+            )
+        console.print()
+        console.print(f"[bold {_A}]Likely contradictions[/bold {_A}] [dim](top 20)[/dim]")
+        console.print(table)
+    else:
+        console.print(f"\n[bold {_P}]No likely contradictions detected at current threshold.[/bold {_P}]")
+
+    suggestions = report.get("resolution_suggestions", [])
+    if suggest_resolutions and suggestions:
+        table = Table(show_header=True, header_style=f"bold {_A}", expand=True)
+        table.add_column("Confidence", width=10, no_wrap=True)
+        table.add_column("Sources", width=20, no_wrap=True)
+        table.add_column("Suggestion", min_width=36, overflow="fold")
+        for item in suggestions[:10]:
+            table.add_row(
+                f"{float(item.get('confidence', 0.0)):.3f}",
+                ", ".join(item.get("source_ids", [])),
+                str(item.get("content", "")),
+            )
+        console.print()
+        console.print(f"[bold {_A}]Resolution suggestions[/bold {_A}] [dim](top 10)[/dim]")
+        console.print(table)
+
+    if not apply:
+        console.print(f"\n[dim]Dry-run complete. Re-run with --apply to persist harmonized summaries.[/dim]")
+        return
+
+    with console.status("Saving harmonized summaries…"):
+        stats = apply_harmonize_report(
+            root,
+            report,
+            apply_rollups=True,
+            apply_resolution_suggestions=apply_resolutions,
+            link_sources=link_sources,
+        )
+
+    indexed_pairs = stats.get("indexed_pairs", [])
+    if indexed_pairs:
+        with console.status("Indexing harmonized summaries…"):
+            batch_index_memories(root, indexed_pairs)
+
+    from .export import export_all
+    with console.status("Updating chronicle…"):
+        export_all(root)
+
+    console.print(
+        f"\n[green]Harmonize apply complete.[/green] "
+        f"Created rollups [bold]{stats.get('created_rollups', 0)}[/bold], "
+        f"created resolutions [bold]{stats.get('created_resolutions', 0)}[/bold], "
+        f"linked [bold]{stats.get('linked', 0)}[/bold]."
+    )
+
+
 # ---------------------------------------------------------------------------
 # mem search
 # ---------------------------------------------------------------------------
@@ -1255,14 +1417,8 @@ def search(
         int,
         typer.Option("--top", "-k", help="Number of results to return"),
     ] = 5,
-    as_json: Annotated[
-        bool,
-        typer.Option("--json", help="Output machine-readable JSON search results"),
-    ] = False,
-    json_compact: Annotated[
-        bool,
-        typer.Option("--json-compact", help="Emit compact one-line JSON (implies --json)"),
-    ] = False,
+    as_json: bool = typer.Option(False, "--json", help="Output machine-readable JSON search results"),
+    json_compact: bool = typer.Option(False, "--json-compact", help="Emit compact one-line JSON (implies --json)"),
 ) -> None:
     """Semantic search over stored memories."""
     from .search import search as do_search
@@ -2590,6 +2746,109 @@ def setup_semantic(
 
 
 # ---------------------------------------------------------------------------
+# lore setup harmonize
+# ---------------------------------------------------------------------------
+
+@setup_app.command("harmonize")
+def setup_harmonize() -> None:
+    """Guided setup for harmonize rollups and contradiction checks."""
+    from .config import load_config, save_config
+    from rich.prompt import Prompt, Confirm
+
+    root = _require_root()
+    cfg = load_config(root)
+    harmonize = dict(cfg.get("harmonize", {}))
+
+    def _ask_int(label: str, default: int, minimum: int = 1) -> int:
+        while True:
+            raw = Prompt.ask(f"  [bold {_P}]{label}[/bold {_P}]", default=str(default)).strip()
+            try:
+                return max(minimum, int(raw))
+            except ValueError:
+                console.print(f"  [bold {_A}]▲[/bold {_A}]  Enter a whole number >= {minimum}.")
+
+    def _ask_float(label: str, default: float) -> float:
+        while True:
+            raw = Prompt.ask(f"  [bold {_P}]{label}[/bold {_P}]", default=f"{default:.2f}").strip()
+            try:
+                return max(0.0, min(1.0, float(raw)))
+            except ValueError:
+                console.print(f"  [bold {_A}]▲[/bold {_A}]  Enter a number between 0.00 and 1.00.")
+
+    console.print()
+    console.print(Panel(
+        f"[bold {_A}]Harmonize Setup[/bold {_A}]\n"
+        f"[dim]Tune rollup generation and contradiction detection without editing YAML by hand.[/dim]",
+        border_style=_BD,
+        padding=(1, 2),
+        style=f"on {_BG}",
+    ))
+    console.print()
+
+    console.print(f"  [bold]Step 1 of 6  —  Enable harmonize[/bold]")
+    harmonize["enabled"] = Confirm.ask(
+        f"  [bold {_P}]Enable harmonize features?[/bold {_P}]",
+        default=bool(harmonize.get("enabled", True)),
+    )
+    console.print()
+
+    console.print(f"  [bold]Step 2 of 6  —  Watch mode[/bold]")
+    harmonize["watch"] = Confirm.ask(
+        f"  [bold {_P}]Allow [bold]lore awaken[/bold] to auto-run harmonize?[/bold {_P}]",
+        default=bool(harmonize.get("watch", False)),
+    )
+    console.print()
+
+    console.print(f"  [bold]Step 3 of 6  —  Rollup recall[/bold]")
+    console.print(f"  [dim]Higher top_k broadens grouping; higher min_score makes grouping stricter.[/dim]")
+    harmonize["top_k"] = _ask_int("Related spells per anchor", int(harmonize.get("top_k", 3)))
+    harmonize["min_score"] = _ask_float("Minimum rollup score", float(harmonize.get("min_score", 0.62)))
+    harmonize["max_rollups"] = _ask_int("Maximum rollups per run", int(harmonize.get("max_rollups", 10)))
+    console.print()
+
+    console.print(f"  [bold]Step 4 of 6  —  Contradiction confidence[/bold]")
+    console.print(f"  [dim]Higher values reduce noise but may hide subtle contradictions.[/dim]")
+    harmonize["contradiction_min_confidence"] = _ask_float(
+        "Minimum contradiction confidence",
+        float(harmonize.get("contradiction_min_confidence", 0.67)),
+    )
+    console.print()
+
+    console.print(f"  [bold]Step 5 of 6  —  Resolution suggestions[/bold]")
+    harmonize["suggest_resolutions"] = Confirm.ask(
+        f"  [bold {_P}]Include resolution suggestions in reports?[/bold {_P}]",
+        default=bool(harmonize.get("suggest_resolutions", True)),
+    )
+    harmonize["apply_resolutions"] = Confirm.ask(
+        f"  [bold {_P}]Persist resolution suggestions during watch-mode harmonize?[/bold {_P}]",
+        default=bool(harmonize.get("apply_resolutions", False)),
+    )
+    console.print()
+
+    console.print(f"  [bold]Step 6 of 6  —  Review[/bold]")
+    console.print(f"  [dim]───────────────────────────────[/dim]")
+    console.print(f"  [bold]Enabled              :[/bold] {'yes' if harmonize['enabled'] else 'no'}")
+    console.print(f"  [bold]Watch mode           :[/bold] {'yes' if harmonize['watch'] else 'no'}")
+    console.print(f"  [bold]Top K                :[/bold] {harmonize['top_k']}")
+    console.print(f"  [bold]Min score            :[/bold] {harmonize['min_score']:.2f}")
+    console.print(f"  [bold]Max rollups          :[/bold] {harmonize['max_rollups']}")
+    console.print(f"  [bold]Contradiction floor  :[/bold] {harmonize['contradiction_min_confidence']:.2f}")
+    console.print(f"  [bold]Suggest resolutions  :[/bold] {'yes' if harmonize['suggest_resolutions'] else 'no'}")
+    console.print(f"  [bold]Apply resolutions    :[/bold] {'yes' if harmonize['apply_resolutions'] else 'no'}")
+    console.print(f"  [dim]───────────────────────────────[/dim]")
+    console.print()
+
+    if not Confirm.ask(f"  [bold {_P}]Save harmonize settings?[/bold {_P}]", default=True):
+        console.print(f"  [dim]Cancelled — harmonize settings unchanged.[/dim]")
+        raise typer.Exit()
+
+    cfg["harmonize"] = harmonize
+    save_config(root, cfg)
+    console.print(f"  [bold {_P}]✓[/bold {_P}]  Harmonize settings saved.")
+    console.print(f"  [dim]Try [bold]lore harmonize[/bold] or [bold]lore awaken --harmonize[/bold].[/dim]")
+
+
+# ---------------------------------------------------------------------------
 # lore setup extract-patterns
 # ---------------------------------------------------------------------------
 
@@ -3107,14 +3366,8 @@ def security() -> None:
 
 @app.command()
 def doctor(
-    as_json: Annotated[
-        bool,
-        typer.Option("--json", help="Output a machine-readable JSON status report"),
-    ] = False,
-    json_compact: Annotated[
-        bool,
-        typer.Option("--json-compact", help="Emit compact one-line JSON (implies --json)"),
-    ] = False,
+    as_json: bool = typer.Option(False, "--json", help="Output a machine-readable JSON status report"),
+    json_compact: bool = typer.Option(False, "--json-compact", help="Emit compact one-line JSON (implies --json)"),
     strict: Annotated[
         bool,
         typer.Option("--strict", help="Exit non-zero unless doctor status is healthy"),
@@ -3518,6 +3771,22 @@ def awaken(
         Optional[float],
         typer.Option("--associate-min-score", help="Minimum association score to accept during watch mode"),
     ] = None,
+    harmonize: Annotated[
+        Optional[bool],
+        typer.Option("--harmonize/--no-harmonize", help="Automatically generate harmonized rollups while watching"),
+    ] = None,
+    harmonize_top: Annotated[
+        Optional[int],
+        typer.Option("--harmonize-top", help="Maximum related memories considered per harmonize anchor during watch mode"),
+    ] = None,
+    harmonize_min_score: Annotated[
+        Optional[float],
+        typer.Option("--harmonize-min-score", help="Minimum association score for harmonize rollups during watch mode"),
+    ] = None,
+    harmonize_apply_resolutions: Annotated[
+        Optional[bool],
+        typer.Option("--harmonize-apply-resolutions/--no-harmonize-apply-resolutions", help="Also persist contradiction resolution suggestions during watch harmonize"),
+    ] = None,
 ) -> None:
     """Awaken the spellbook — watch .lore and auto-export AI context on every change."""
     import os
@@ -3539,6 +3808,21 @@ def awaken(
         auto_associate=associate,
         associate_top=associate_top,
         associate_min_score=associate_min_score,
+    )
+    harmonize_cfg = cfg.get("harmonize", {}) if isinstance(cfg.get("harmonize", {}), dict) else {}
+    harmonize_enabled = bool(harmonize_cfg.get("enabled", True))
+    watch_harmonize = bool(harmonize_cfg.get("watch", False)) if harmonize is None else bool(harmonize)
+    watch_harmonize = watch_harmonize and harmonize_enabled
+    resolved_harmonize_top = max(1, int(harmonize_top if harmonize_top is not None else harmonize_cfg.get("top_k", 3)))
+    resolved_harmonize_min = float(harmonize_min_score if harmonize_min_score is not None else harmonize_cfg.get("min_score", 0.62))
+    resolved_harmonize_min = max(0.0, min(1.0, resolved_harmonize_min))
+    resolved_harmonize_max_rollups = max(1, int(harmonize_cfg.get("max_rollups", 3)))
+    resolved_harmonize_contradiction_confidence = float(harmonize_cfg.get("contradiction_min_confidence", 0.67))
+    resolved_harmonize_contradiction_confidence = max(0.0, min(1.0, resolved_harmonize_contradiction_confidence))
+    resolved_harmonize_apply_resolutions = bool(
+        harmonize_cfg.get("apply_resolutions", False)
+        if harmonize_apply_resolutions is None
+        else harmonize_apply_resolutions
     )
 
     pf = pid_file(root)
@@ -3568,6 +3852,12 @@ def awaken(
             associate_on_watch=watch_associate,
             associate_top=resolved_top,
             associate_min_score=resolved_min,
+            harmonize_on_watch=watch_harmonize,
+            harmonize_top=resolved_harmonize_top,
+            harmonize_min_score=resolved_harmonize_min,
+            harmonize_max_rollups=resolved_harmonize_max_rollups,
+            harmonize_contradiction_min_confidence=resolved_harmonize_contradiction_confidence,
+            harmonize_apply_resolutions=resolved_harmonize_apply_resolutions,
         )
         console.print(
             f"\n  [bold {_P}]✓[/bold {_P}]  The spellbook stirs in the shadows.\n"
@@ -3629,6 +3919,12 @@ def awaken(
             "associate_on_watch": watch_associate,
             "associate_top": resolved_top,
             "associate_min_score": resolved_min,
+            "harmonize_on_watch": watch_harmonize,
+            "harmonize_top": resolved_harmonize_top,
+            "harmonize_min_score": resolved_harmonize_min,
+            "harmonize_max_rollups": resolved_harmonize_max_rollups,
+            "harmonize_contradiction_min_confidence": resolved_harmonize_contradiction_confidence,
+            "harmonize_apply_resolutions": resolved_harmonize_apply_resolutions,
         },
         daemon=True,
     )

@@ -106,6 +106,17 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "watch": False,
         },
     },
+    # Harmonize policy for rollups + contradiction detection.
+    "harmonize": {
+        "enabled": True,
+        "watch": False,
+        "top_k": 3,
+        "min_score": 0.62,
+        "max_rollups": 10,
+        "contradiction_min_confidence": 0.67,
+        "suggest_resolutions": True,
+        "apply_resolutions": False,
+    },
     # Security preamble injected into all AI context file exports:
     "security": {
         "enabled": False,

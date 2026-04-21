@@ -372,6 +372,101 @@ class AssociationScreen(ModalScreen):
         self.dismiss(True)
 
 
+class HarmonizeScreen(ModalScreen):
+    """Preview harmonize report and optionally persist rollups/suggestions."""
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close", show=False),
+    ]
+
+    CSS = f"""
+    HarmonizeScreen {{ align: center middle; }}
+    #dialog {{
+        width: 114; height: auto;
+        border: solid {_BORDER}; background: {_BG}; padding: 1 2;
+    }}
+    #dialog-title {{
+        color: {_AMBER}; text-style: bold; text-align: center;
+        width: 1fr; margin-bottom: 1;
+    }}
+    #harmonize-box {{
+        background: {_SURFACE}; color: {_PHOSPHOR_H};
+        border: solid {_BORDER}; padding: 0 1; margin: 1 0;
+        height: auto;
+    }}
+    #hint {{ color: {_PHOSPHOR_M}; text-align: center; margin-top: 1; }}
+    #btn-row {{ height: auto; align: right middle; margin-top: 1; }}
+    {_MODAL_BTN}
+    #apply-rollups {{
+        background: {_BORDER}; color: {_PHOSPHOR};
+        border: solid {_AMBER}; text-style: bold;
+    }}
+    #apply-rollups:hover {{ background: {_AMBER}; color: {_BG}; }}
+    #apply-all {{
+        background: {_BORDER}; color: {_PHOSPHOR};
+        border: solid {_PHOSPHOR}; text-style: bold;
+    }}
+    #apply-all:hover {{ background: {_PHOSPHOR}; color: {_BG}; }}
+    """
+
+    def __init__(self, report: dict[str, object]) -> None:
+        super().__init__()
+        self._report = report
+
+    def _render_lines(self) -> str:
+        rollups = list(self._report.get("rollups", []))
+        contradictions = list(self._report.get("contradictions", []))
+        suggestions = list(self._report.get("resolution_suggestions", []))
+        lines = [
+            f"memories scanned: {self._report.get('memory_count', 0)}",
+            f"rollup candidates: {len(rollups)}",
+            f"contradictions: {len(contradictions)}",
+            f"resolution suggestions: {len(suggestions)}",
+            "",
+        ]
+        if contradictions:
+            lines.append("Top contradictions")
+            lines.append("------------------")
+            for item in contradictions[:5]:
+                lines.append(
+                    f"{float(item.get('confidence', 0.0)):.3f} {item.get('type', '')}: "
+                    f"{item.get('left_id', '')} <-> {item.get('right_id', '')}"
+                )
+        elif rollups:
+            lines.append("Top rollups")
+            lines.append("-----------")
+            for item in rollups[:5]:
+                lines.append(
+                    f"{float(item.get('score', 0.0)):.3f} {item.get('category', '')}: "
+                    f"{_preview(str(item.get('content', '')), 72)}"
+                )
+        else:
+            lines.append("No harmonize candidates found at current thresholds.")
+        return "\n".join(lines)
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label("◈  HARMONIZE REPORT  ◈", id="dialog-title", markup=False)
+            yield Static(self._render_lines(), id="harmonize-box", markup=False)
+            yield Label("Apply Rollups writes summaries; Apply All also writes resolution suggestions.", id="hint", markup=False)
+            with Horizontal(id="btn-row"):
+                yield Button("[[ CLOSE ]]", id="cancel")
+                yield Button("[[ APPLY ROLLUPS ]]", id="apply-rollups")
+                yield Button("[[ APPLY ALL ]]", id="apply-all")
+
+    @on(Button.Pressed, "#cancel")
+    def cancel(self) -> None:
+        self.dismiss("none")
+
+    @on(Button.Pressed, "#apply-rollups")
+    def apply_rollups(self) -> None:
+        self.dismiss("rollups")
+
+    @on(Button.Pressed, "#apply-all")
+    def apply_all(self) -> None:
+        self.dismiss("all")
+
+
 # ---------------------------------------------------------------------------
 # Edit-memory modal  (u key)
 # ---------------------------------------------------------------------------
@@ -772,6 +867,7 @@ class LoreApp(App):
         Binding("u",      "edit_memory",   "Edit"),
         Binding("d",      "delete_memory", "Delete"),
         Binding("x",      "associate_memory", "Assoc"),
+        Binding("h",      "harmonize_memory", "Harmonize"),
         Binding("g",      "dependency_map", "Deps"),
         Binding("e",      "export_all",    "Export"),
         Binding("r",      "refresh",       "Refresh"),
@@ -1043,6 +1139,59 @@ class LoreApp(App):
         memories = list_memories(self._root)
         self.call_from_thread(self._populate, memories, False)
         self.call_from_thread(self._set_status, f"▸ ✓  applied {applied} related link(s) for [{mem_id}]")
+
+    # ------------------------------------------------------------------
+    # Harmonize memories  (h key)
+    # ------------------------------------------------------------------
+
+    def action_harmonize_memory(self) -> None:
+        self._set_status("▸ generating harmonize report…")
+        self._do_harmonize_preview()
+
+    @work(thread=True)
+    def _do_harmonize_preview(self) -> None:
+        from .harmonize import generate_harmonize_report
+
+        report = generate_harmonize_report(self._root)
+        self.call_from_thread(self._open_harmonize_screen, report)
+
+    def _open_harmonize_screen(self, report: dict[str, object]) -> None:
+        self.push_screen(
+            HarmonizeScreen(report),
+            lambda mode: self._on_harmonize_result(str(mode), report),
+        )
+
+    def _on_harmonize_result(self, mode: str, report: dict[str, object]) -> None:
+        if mode == "none":
+            self._set_status("▸ harmonize preview closed")
+            return
+        apply_resolutions = mode == "all"
+        self._set_status("▸ applying harmonize results…")
+        self._do_harmonize_apply(report, apply_resolutions)
+
+    @work(thread=True)
+    def _do_harmonize_apply(self, report: dict[str, object], apply_resolutions: bool) -> None:
+        from .export import export_all
+        from .harmonize import apply_harmonize_report
+        from .search import batch_index_memories
+
+        stats = apply_harmonize_report(
+            self._root,
+            report,
+            apply_rollups=True,
+            apply_resolution_suggestions=apply_resolutions,
+            link_sources=True,
+        )
+        indexed_pairs = stats.get("indexed_pairs", [])
+        if indexed_pairs:
+            batch_index_memories(self._root, indexed_pairs)
+        export_all(self._root)
+        memories = list_memories(self._root)
+        self.call_from_thread(self._populate, memories, False)
+        self.call_from_thread(
+            self._set_status,
+            f"▸ ✓ harmonized: rollups={stats.get('created_rollups', 0)} resolutions={stats.get('created_resolutions', 0)}",
+        )
 
     # ------------------------------------------------------------------
     # Edit memory  (u key)

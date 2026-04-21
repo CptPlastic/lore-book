@@ -15,7 +15,7 @@ from typer.testing import CliRunner
 
 from lore import __version__
 from lore.cli import _latest_pypi_version, _parse_id_csv, app
-from lore.store import init_store
+from lore.store import add_memory, init_store, list_memories
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -481,6 +481,86 @@ class CliIntegrationTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertIn("summary", payload)
         self.assertEqual(payload["summary"]["error"], 0)
+
+    def test_harmonize_apply_creates_summary_and_calls_index_export(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            init_store(root)
+            add_memory(root, "facts", "Auto export is enabled for this repo")
+            add_memory(root, "facts", "Auto export is not enabled for this repo")
+
+            with _cwd(td):
+                with mock.patch("lore.search.batch_index_memories") as mocked_index:
+                    with mock.patch("lore.export.export_all", return_value=[]) as mocked_export:
+                        result = self.runner.invoke(
+                            app,
+                            ["harmonize", "--apply", "--apply-resolutions"],
+                            env={"LORE_NO_COLOR": "1"},
+                        )
+
+            self.assertEqual(result.exit_code, 0)
+            summaries = list_memories(root, "summaries")
+            self.assertGreaterEqual(len(summaries), 1)
+            self.assertTrue(any("harmonized" in m.get("tags", []) for m in summaries))
+            mocked_index.assert_called()
+            mocked_export.assert_called_once()
+            self.assertIn("Harmonize apply complete", _clean(result.stdout))
+
+    def test_harmonize_json_outputs_report(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            init_store(root)
+            add_memory(root, "facts", "Auto export is enabled for this repo")
+            add_memory(root, "facts", "Auto export is not enabled for this repo")
+
+            with _cwd(td):
+                result = self.runner.invoke(
+                    app,
+                    ["harmonize", "--json-compact"],
+                    env={"LORE_NO_COLOR": "1"},
+                )
+
+            self.assertEqual(result.exit_code, 0)
+            self.assertNotIn("\n", result.stdout.strip())
+            payload = json.loads(result.stdout)
+            self.assertIn("rollups", payload)
+            self.assertIn("contradictions", payload)
+            self.assertIn("memory_count", payload)
+            self.assertGreaterEqual(payload["memory_count"], 2)
+
+    def test_setup_harmonize_updates_config(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            init_store(root)
+
+            input_text = "\n".join([
+                "y",      # enabled
+                "y",      # watch
+                "4",      # top_k
+                "0.58",   # min_score
+                "12",     # max_rollups
+                "0.63",   # contradiction_min_confidence
+                "y",      # suggest_resolutions
+                "n",      # apply_resolutions
+                "y",      # save
+            ]) + "\n"
+
+            with _cwd(td):
+                result = self.runner.invoke(app, ["setup", "harmonize"], input=input_text, env={"LORE_NO_COLOR": "1"})
+
+            self.assertEqual(result.exit_code, 0)
+            from lore.config import load_config
+
+            cfg = load_config(root)
+            harmonize = cfg.get("harmonize", {})
+            self.assertTrue(harmonize.get("enabled"))
+            self.assertTrue(harmonize.get("watch"))
+            self.assertEqual(harmonize.get("top_k"), 4)
+            self.assertAlmostEqual(float(harmonize.get("min_score")), 0.58)
+            self.assertEqual(harmonize.get("max_rollups"), 12)
+            self.assertAlmostEqual(float(harmonize.get("contradiction_min_confidence")), 0.63)
+            self.assertTrue(harmonize.get("suggest_resolutions"))
+            self.assertFalse(harmonize.get("apply_resolutions"))
 
 
 class CliEmptyStateTests(unittest.TestCase):

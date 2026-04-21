@@ -114,6 +114,12 @@ def run_spellbook(
     associate_on_watch: bool = False,
     associate_top: int = 3,
     associate_min_score: float = 0.55,
+    harmonize_on_watch: bool = False,
+    harmonize_top: int = 3,
+    harmonize_min_score: float = 0.62,
+    harmonize_max_rollups: int = 3,
+    harmonize_contradiction_min_confidence: float = 0.67,
+    harmonize_apply_resolutions: bool = False,
 ) -> None:
     """Start the spellbook daemon loop — blocks until stop_event is set.
 
@@ -127,6 +133,7 @@ def run_spellbook(
     from .chronicle import import_chronicle
     from .export import export_all
     from .search import batch_index_memories
+    from .harmonize import apply_harmonize_report, generate_harmonize_report
 
     if stop_event is None:
         stop_event = threading.Event()
@@ -135,19 +142,18 @@ def run_spellbook(
     chronicle_path = root / "CHRONICLE.md"
     ignore_chronicle_until = 0.0
     ignore_association_until = 0.0
+    ignore_harmonize_until = 0.0
 
     def _notify() -> None:
         if on_state_change:
             on_state_change(state)
 
     def _do_export(src_path: str) -> None:
-        nonlocal ignore_chronicle_until, ignore_association_until
+        nonlocal ignore_chronicle_until, ignore_association_until, ignore_harmonize_until
         state.status = SpellbookStatus.CASTING
         state.last_scroll = Path(src_path).name
         _notify()
         try:
-            export_all(root)
-
             if associate_on_watch and time.time() >= ignore_association_until:
                 mem_id = _memory_id_from_event_path(src_path)
                 if mem_id:
@@ -166,6 +172,30 @@ def run_spellbook(
                         if applied:
                             # Prevent immediate recursive retriggers from association writes.
                             ignore_association_until = time.time() + max(2.0, debounce * 2)
+
+            if harmonize_on_watch and time.time() >= ignore_harmonize_until:
+                report = generate_harmonize_report(
+                    root,
+                    top_k=max(1, int(harmonize_top)),
+                    min_score=max(0.0, min(1.0, float(harmonize_min_score))),
+                    max_rollups=max(1, int(harmonize_max_rollups)),
+                    contradiction_min_confidence=max(0.0, min(1.0, float(harmonize_contradiction_min_confidence))),
+                    include_resolution_suggestions=bool(harmonize_apply_resolutions),
+                )
+                harmonize_stats = apply_harmonize_report(
+                    root,
+                    report,
+                    apply_rollups=True,
+                    apply_resolution_suggestions=bool(harmonize_apply_resolutions),
+                    link_sources=True,
+                )
+                indexed_pairs = harmonize_stats.get("indexed_pairs") or []
+                if indexed_pairs:
+                    batch_index_memories(root, indexed_pairs)
+                    # Prevent immediate recursive retriggers from harmonize writes.
+                    ignore_harmonize_until = time.time() + max(2.0, debounce * 2)
+
+            export_all(root)
 
             ignore_chronicle_until = time.time() + max(2.0, debounce * 2)
             state.cast_count += 1
@@ -244,6 +274,12 @@ def daemonize(
     associate_on_watch: bool = False,
     associate_top: int = 3,
     associate_min_score: float = 0.55,
+    harmonize_on_watch: bool = False,
+    harmonize_top: int = 3,
+    harmonize_min_score: float = 0.62,
+    harmonize_max_rollups: int = 3,
+    harmonize_contradiction_min_confidence: float = 0.67,
+    harmonize_apply_resolutions: bool = False,
 ) -> None:
     """Fork into background, detach from terminal, and write PID file.
 
@@ -289,6 +325,12 @@ def daemonize(
             associate_on_watch=associate_on_watch,
             associate_top=associate_top,
             associate_min_score=associate_min_score,
+            harmonize_on_watch=harmonize_on_watch,
+            harmonize_top=harmonize_top,
+            harmonize_min_score=harmonize_min_score,
+            harmonize_max_rollups=harmonize_max_rollups,
+            harmonize_contradiction_min_confidence=harmonize_contradiction_min_confidence,
+            harmonize_apply_resolutions=harmonize_apply_resolutions,
         )
     finally:
         pf.unlink(missing_ok=True)
