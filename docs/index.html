@@ -172,6 +172,35 @@
       </div>
     </section>
 
+    <!-- ══ HARMONIZE ══ -->
+    <section class="parchment">
+      <h2><span class="rune">⚖</span> Harmonize</h2>
+      <p>Harmonize scans your spellbook in one pass and does two things: groups closely related spells into candidate rollup summaries, and flags entries that likely contradict each other. By default it is report-only — nothing is written until you say so.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>Preview</h3>
+          <p>Run a dry-run to see rollup candidates and contradictions without touching the store.</p>
+          <div class="incantation"><span class="cmd">lore harmonize</span><br><span class="cmd">lore harmonize</span> <span class="arg">--min-score 0.50</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>Apply</h3>
+          <p>Persist a single rolling snapshot summary. Each apply updates it in place — no accumulated clutter.</p>
+          <div class="incantation"><span class="cmd">lore harmonize</span> <span class="arg">--apply</span><br><span class="cmd">lore harmonize</span> <span class="arg">--apply --apply-resolutions</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>Watch mode</h3>
+          <p>Run harmonize automatically in the background daemon whenever the store changes.</p>
+          <div class="incantation"><span class="cmd">lore awaken</span> <span class="arg">--harmonize</span><br><span class="cmd">lore awaken</span> <span class="arg">--harmonize --harmonize-apply-resolutions</span></div>
+        </div>
+        <div class="feature-card">
+          <h3>AI snapshot summary</h3>
+          <p>Optionally ask an OpenAI-compatible model to write the snapshot text. Falls back silently to the local deterministic summary if no key is set.</p>
+          <div class="incantation"><span class="comment"># Set your key once</span><br><span class="cmd">export</span> <span class="arg">LORE_AI_API_KEY=sk-...</span><br><span class="comment"># Enable in the guided setup</span><br><span class="cmd">lore setup harmonize</span></div>
+        </div>
+      </div>
+      <div class="note">The setup wizard shows a green ✓ if an API key is detected, a yellow warning if not — and only prompts for model/URL/timeout settings when AI is actually enabled.</div>
+    </section>
+
     <!-- ══ AUTOMATION & CI ══ -->
     <section class="parchment">
       <h2><span class="rune">⚙</span> Automation & CI</h2>
@@ -258,8 +287,12 @@
           <p><code>lore security</code>, <code>lore lint</code>, <code>lore lint --json</code>, <code>lore trust refresh</code>, <code>lore trust explain &lt;id&gt;</code></p>
         </div>
         <div class="command-item">
+          <strong>Harmonize</strong>
+          <p><code>lore harmonize</code>, <code>lore harmonize --apply</code>, <code>lore harmonize --apply-resolutions</code>, <code>lore setup harmonize</code></p>
+        </div>
+        <div class="command-item">
           <strong>Automation</strong>
-          <p><code>lore hook install</code>, <code>lore awaken</code>, <code>lore slumber</code>, <code>lore sync</code>, <code>lore doctor</code>, <code>lore ui</code></p>
+          <p><code>lore hook install</code>, <code>lore awaken</code>, <code>lore awaken --harmonize</code>, <code>lore slumber</code>, <code>lore sync</code>, <code>lore doctor</code>, <code>lore ui</code></p>
         </div>
         <div class="command-item">
           <strong>Association Health</strong>

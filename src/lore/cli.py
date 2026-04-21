@@ -2822,32 +2822,43 @@ def setup_harmonize() -> None:
     console.print()
 
     console.print(f"  [bold]Step 5 of 7  —  AI snapshot summary[/bold]")
+    import os as _os
+    _key_set = bool(_os.environ.get("LORE_AI_API_KEY") or _os.environ.get("OPENAI_API_KEY"))
+    if _key_set:
+        console.print(f"  [bold green]✓[/bold green]  API key detected in environment.")
+    else:
+        console.print(f"  [bold yellow]![/bold yellow]  No API key found.")
+        console.print(f"  [dim]  Set [bold]LORE_AI_API_KEY[/bold] (or [bold]OPENAI_API_KEY[/bold]) before running harmonize with AI.[/dim]")
+        console.print(f"  [dim]  Example:  export LORE_AI_API_KEY=sk-...[/dim]")
+    console.print()
     ai_summary["enabled"] = Confirm.ask(
         f"  [bold {_P}]Use AI to write the harmonize snapshot summary?[/bold {_P}]",
         default=bool(ai_summary.get("enabled", False)),
     )
-    ai_summary["model"] = Prompt.ask(
-        f"  [bold {_P}]AI model[/bold {_P}]",
-        default=str(ai_summary.get("model", "gpt-4o-mini")),
-    ).strip() or "gpt-4o-mini"
-    ai_summary["base_url"] = Prompt.ask(
-        f"  [bold {_P}]AI API base URL[/bold {_P}]",
-        default=str(ai_summary.get("base_url", "https://api.openai.com/v1")),
-    ).strip() or "https://api.openai.com/v1"
-    ai_summary["timeout_seconds"] = _ask_int(
-        "AI timeout seconds",
-        int(ai_summary.get("timeout_seconds", 12)),
-    )
-    ai_summary["max_output_tokens"] = _ask_int(
-        "AI max output tokens",
-        int(ai_summary.get("max_output_tokens", 260)),
-    )
-    ai_summary["max_chars"] = _ask_int(
-        "Snapshot max characters",
-        int(ai_summary.get("max_chars", 1400)),
-        minimum=200,
-    )
-    console.print(f"  [dim]API key comes from LORE_AI_API_KEY or OPENAI_API_KEY.[/dim]")
+    if ai_summary["enabled"]:
+        ai_summary["model"] = Prompt.ask(
+            f"  [bold {_P}]AI model[/bold {_P}]",
+            default=str(ai_summary.get("model", "gpt-4o-mini")),
+        ).strip() or "gpt-4o-mini"
+        ai_summary["base_url"] = Prompt.ask(
+            f"  [bold {_P}]AI API base URL[/bold {_P}]",
+            default=str(ai_summary.get("base_url", "https://api.openai.com/v1")),
+        ).strip() or "https://api.openai.com/v1"
+        ai_summary["timeout_seconds"] = _ask_int(
+            "AI timeout seconds",
+            int(ai_summary.get("timeout_seconds", 12)),
+        )
+        ai_summary["max_output_tokens"] = _ask_int(
+            "AI max output tokens",
+            int(ai_summary.get("max_output_tokens", 260)),
+        )
+        ai_summary["max_chars"] = _ask_int(
+            "Snapshot max characters",
+            int(ai_summary.get("max_chars", 1400)),
+            minimum=200,
+        )
+        if not _key_set:
+            console.print(f"  [bold yellow]![/bold yellow]  Remember to set [bold]LORE_AI_API_KEY[/bold] — AI summary will silently fall back to local mode without it.")
     console.print()
 
     console.print(f"  [bold]Step 6 of 7  —  Resolution suggestions[/bold]")

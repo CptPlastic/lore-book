@@ -664,6 +664,8 @@ If you want a guided setup flow instead of editing YAML directly:
 lore setup harmonize
 ```
 
+The setup wizard walks through each option interactively. During the AI summary step it checks your environment for `LORE_AI_API_KEY` or `OPENAI_API_KEY` and shows a clear status — green if a key is found, yellow with setup instructions if not. The extra AI fields (model, URL, timeout) only appear when you opt in.
+
 ### Basic usage
 
 ```sh
@@ -741,9 +743,15 @@ Field meanings:
 - `ai_summary.max_output_tokens` - response token budget for generated snapshot text
 - `ai_summary.max_chars` - hard cap for stored snapshot size
 
-For API credentials, set one of these environment variables:
-- `LORE_AI_API_KEY` (preferred)
-- `OPENAI_API_KEY`
+For API credentials, set one of these environment variables before running harmonize:
+
+```sh
+export LORE_AI_API_KEY=sk-...      # preferred
+# or
+export OPENAI_API_KEY=sk-...
+```
+
+`lore setup harmonize` will tell you if a key is detected in your environment. Without a key, AI summary silently falls back to the local deterministic snapshot — no errors, no noise.
 
 ### Recommended presets
 

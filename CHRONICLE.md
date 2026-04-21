@@ -84,6 +84,9 @@ Sync documentation and CHRONICLE notes with recent feature and reliability chang
 - Add harmonize rollup & contradiction feature
 
 Introduce a new harmonize feature to detect contradictions and create rollup summaries. Adds src/lore/harmonize.py (report generation and apply logic), CLI commands (lore harmonize, setup harmonize, awaken flags) and options, daemon integration to optionally run harmonize on watch, TUI harmonize screen and key binding, and default harmonize settings in config. Harmonize is report-only by default; --apply persists summaries and optional resolution suggestions, which are indexed and exported. Also updates README and CHRONICLE docs and adds tests for harmonize behavior; includes minor CLI typing cleanup for several commands. _(trust: low 50)_
+- Add harmonize feature and daemon/CLI integration
+
+Introduce a harmonize subsystem to detect contradictions and generate rollup summaries (report-only by default, --apply to persist resolutions) via src/lore/harmonize.py. Wire harmonize into the CLI (new commands/options and minor typing cleanup in src/lore/cli.py), add daemon integration to optionally run harmonize during file watch (src/lore/daemon.py), and update configuration defaults (src/lore/config.py). Update documentation (README.md, CHRONICLE.md) and add/adjust tests (tests/test_cli.py, tests/test_harmonize.py) to cover harmonize behavior. _(trust: low 50)_
 
 ## Summaries
 
