@@ -116,6 +116,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "contradiction_min_confidence": 0.67,
         "suggest_resolutions": True,
         "apply_resolutions": False,
+        "ai_summary": {
+            "enabled": False,
+            "model": "gpt-4o-mini",
+            "base_url": "https://api.openai.com/v1",
+            "timeout_seconds": 12,
+            "max_output_tokens": 260,
+            "max_chars": 1400,
+        },
     },
     # Security preamble injected into all AI context file exports:
     "security": {

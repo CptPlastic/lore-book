@@ -682,8 +682,11 @@ lore harmonize --apply --apply-resolutions
 
 The current implementation is intentionally conservative:
 - source spells are never overwritten
-- all harmonized output is appended as new `summaries` entries
+- harmonize maintains one rolling `harmonize:snapshot` summary entry by default
 - created summaries are linked back to their source spells unless disabled
+
+When a snapshot already exists, harmonize updates it in place so Chronicle stays compact.
+Legacy harmonize rollup/resolution entries are pruned during apply.
 
 ### Watch mode
 
@@ -713,6 +716,13 @@ harmonize:
   contradiction_min_confidence: 0.67
   suggest_resolutions: true
   apply_resolutions: false
+  ai_summary:
+    enabled: false
+    model: gpt-4o-mini
+    base_url: https://api.openai.com/v1
+    timeout_seconds: 12
+    max_output_tokens: 260
+    max_chars: 1400
 ```
 
 Field meanings:
@@ -724,6 +734,16 @@ Field meanings:
 - `contradiction_min_confidence` - minimum confidence required before a contradiction is shown
 - `suggest_resolutions` - include resolution suggestions in report mode
 - `apply_resolutions` - when harmonize writes during watch mode, also persist resolution suggestions
+- `ai_summary.enabled` - when true, harmonize asks an AI model to write the snapshot text
+- `ai_summary.model` - chat-completions model name used for AI snapshot generation
+- `ai_summary.base_url` - OpenAI-compatible API base URL
+- `ai_summary.timeout_seconds` - request timeout for AI snapshot generation
+- `ai_summary.max_output_tokens` - response token budget for generated snapshot text
+- `ai_summary.max_chars` - hard cap for stored snapshot size
+
+For API credentials, set one of these environment variables:
+- `LORE_AI_API_KEY` (preferred)
+- `OPENAI_API_KEY`
 
 ### Recommended presets
 

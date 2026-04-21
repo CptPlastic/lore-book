@@ -540,6 +540,12 @@ class CliIntegrationTests(unittest.TestCase):
                 "0.58",   # min_score
                 "12",     # max_rollups
                 "0.63",   # contradiction_min_confidence
+                "y",      # ai_summary enabled
+                "gpt-4o-mini",  # ai_summary model
+                "https://api.openai.com/v1",  # ai_summary base_url
+                "9",      # ai_summary timeout_seconds
+                "300",    # ai_summary max_output_tokens
+                "1500",   # ai_summary max_chars
                 "y",      # suggest_resolutions
                 "n",      # apply_resolutions
                 "y",      # save
@@ -559,6 +565,13 @@ class CliIntegrationTests(unittest.TestCase):
             self.assertAlmostEqual(float(harmonize.get("min_score")), 0.58)
             self.assertEqual(harmonize.get("max_rollups"), 12)
             self.assertAlmostEqual(float(harmonize.get("contradiction_min_confidence")), 0.63)
+            ai_summary = harmonize.get("ai_summary", {})
+            self.assertTrue(ai_summary.get("enabled"))
+            self.assertEqual(ai_summary.get("model"), "gpt-4o-mini")
+            self.assertEqual(ai_summary.get("base_url"), "https://api.openai.com/v1")
+            self.assertEqual(ai_summary.get("timeout_seconds"), 9)
+            self.assertEqual(ai_summary.get("max_output_tokens"), 300)
+            self.assertEqual(ai_summary.get("max_chars"), 1500)
             self.assertTrue(harmonize.get("suggest_resolutions"))
             self.assertFalse(harmonize.get("apply_resolutions"))
 

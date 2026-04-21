@@ -120,6 +120,7 @@ def run_spellbook(
     harmonize_max_rollups: int = 3,
     harmonize_contradiction_min_confidence: float = 0.67,
     harmonize_apply_resolutions: bool = False,
+    harmonize_ai_summary_config: dict[str, object] | None = None,
 ) -> None:
     """Start the spellbook daemon loop — blocks until stop_event is set.
 
@@ -188,6 +189,7 @@ def run_spellbook(
                     apply_rollups=True,
                     apply_resolution_suggestions=bool(harmonize_apply_resolutions),
                     link_sources=True,
+                    ai_summary_config=harmonize_ai_summary_config,
                 )
                 indexed_pairs = harmonize_stats.get("indexed_pairs") or []
                 if indexed_pairs:
@@ -280,6 +282,7 @@ def daemonize(
     harmonize_max_rollups: int = 3,
     harmonize_contradiction_min_confidence: float = 0.67,
     harmonize_apply_resolutions: bool = False,
+    harmonize_ai_summary_config: dict[str, object] | None = None,
 ) -> None:
     """Fork into background, detach from terminal, and write PID file.
 
@@ -331,6 +334,7 @@ def daemonize(
             harmonize_max_rollups=harmonize_max_rollups,
             harmonize_contradiction_min_confidence=harmonize_contradiction_min_confidence,
             harmonize_apply_resolutions=harmonize_apply_resolutions,
+            harmonize_ai_summary_config=harmonize_ai_summary_config,
         )
     finally:
         pf.unlink(missing_ok=True)
