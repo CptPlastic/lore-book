@@ -87,6 +87,14 @@ Introduce a new harmonize feature to detect contradictions and create rollup sum
 - Add harmonize feature and daemon/CLI integration
 
 Introduce a harmonize subsystem to detect contradictions and generate rollup summaries (report-only by default, --apply to persist resolutions) via src/lore/harmonize.py. Wire harmonize into the CLI (new commands/options and minor typing cleanup in src/lore/cli.py), add daemon integration to optionally run harmonize during file watch (src/lore/daemon.py), and update configuration defaults (src/lore/config.py). Update documentation (README.md, CHRONICLE.md) and add/adjust tests (tests/test_cli.py, tests/test_harmonize.py) to cover harmonize behavior. _(trust: low 50)_
+- Add harmonize docs and CLI integration
+
+Introduce harmonize-related documentation and wire up CLI setup behavior. Updates CHRONICLE.md, README.md and docs/index.html with a new Harmonize section and setup guidance. In src/lore/cli.py, setup_harmonize now detects LORE_AI_API_KEY/OPENAI_API_KEY in the environment, displays a clear status (green/yellow), prompts AI-related settings only when AI is enabled, and warns that AI summaries fall back to a local deterministic snapshot if no key is present. _(trust: low 50)_
+- Add CHRONICLE sync & automated releases _(trust: low 50)_
+- Add harmonize docs and CLI integration _(trust: low 50)_
+- Add harmonize rollup & contradiction feature _(trust: low 50)_
+- Remove commit validation; update CHRONICLE _(trust: low 50)_
+- Add harmonize feature and daemon/CLI integration _(trust: low 50)_
 
 ## Summaries
 
