@@ -386,7 +386,7 @@ Example conventions:
 
 ---
 
-## Relics — capture now, curate later
+##  Relics — capture now, curate later
 
 Use relics when you want to preserve raw information without slowing down to decide what matters.
 
