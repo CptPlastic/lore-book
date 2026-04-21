@@ -176,6 +176,51 @@ class HarmonizeApplyTests(unittest.TestCase):
             self.assertEqual(len(summaries), 1)
             self.assertIn("Search indexing policy clarified", summaries[0].get("content", ""))
 
+    def test_apply_prunes_duplicate_snapshot_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            init_store(root)
+
+            add_memory(root, "facts", "Deployment uses blue/green rollout")
+            add_memory(root, "facts", "Deployment uses canary rollout")
+            add_memory(
+                root,
+                "summaries",
+                "Memory snapshot: stale duplicate one.",
+                tags=["harmonized", "snapshot", "auto"],
+                source="harmonize:snapshot",
+            )
+            add_memory(
+                root,
+                "summaries",
+                "Memory snapshot: stale duplicate two.",
+                tags=["harmonized", "snapshot", "auto"],
+                source="harmonize:snapshot",
+            )
+
+            report = {
+                "memory_count": 2,
+                "rollups": [],
+                "contradictions": [],
+                "resolution_suggestions": [],
+            }
+
+            stats = apply_harmonize_report(
+                root,
+                report,
+                apply_rollups=True,
+                apply_resolution_suggestions=False,
+                link_sources=False,
+            )
+
+            self.assertEqual(stats["mode"], "snapshot")
+            self.assertGreaterEqual(stats["removed_legacy"], 1)
+
+            summaries = list_memories(root, "summaries")
+            self.assertEqual(len(summaries), 1)
+            self.assertEqual(summaries[0].get("source"), "harmonize:snapshot")
+            self.assertIn("Memory snapshot:", summaries[0].get("content", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

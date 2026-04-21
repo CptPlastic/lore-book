@@ -86,6 +86,14 @@ def _strip_export_suffixes(category: str, text: str) -> tuple[str, list[str]]:
     return content, tags
 
 
+def _is_noisy_chronicle_bullet(category: str, content: str) -> bool:
+    """Return True for low-signal export artifacts that should not be re-imported."""
+    lower = content.lower()
+    if category == "summaries" and "memory snapshot:" in lower:
+        return True
+    return False
+
+
 def import_chronicle(
     root: Path,
     chronicle_path: Path | None = None,
@@ -122,6 +130,7 @@ def import_chronicle(
     added = 0
     skipped_duplicates = 0
     skipped_unknown_section = 0
+    skipped_noise = 0
     indexed_pairs: list[tuple[str, str]] = []
 
     rel_source = f"chronicle:{path.relative_to(root)}" if path.is_relative_to(root) else f"chronicle:{path}"
@@ -143,6 +152,9 @@ def import_chronicle(
 
         content, tags = _strip_export_suffixes(current_category, bullet_match.group(1))
         if not content.strip():
+            continue
+        if _is_noisy_chronicle_bullet(current_category, content):
+            skipped_noise += 1
             continue
 
         recognized += 1
@@ -167,5 +179,6 @@ def import_chronicle(
         "added": added,
         "skipped_duplicates": skipped_duplicates,
         "skipped_unknown_section": skipped_unknown_section,
+        "skipped_noise": skipped_noise,
         "indexed_pairs": indexed_pairs,
     }

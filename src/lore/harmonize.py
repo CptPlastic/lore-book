@@ -495,11 +495,13 @@ def apply_harmonize_report(
             report,
             ai_summary_config=ai_summary_config,
         )
-        snapshot_entry = None
-        for item in existing_summaries:
-            if str(item.get("source", "")).strip().lower() == "harmonize:snapshot":
-                snapshot_entry = item
-                break
+        snapshot_entries = [
+            item
+            for item in existing_summaries
+            if str(item.get("source", "")).strip().lower() == "harmonize:snapshot"
+            and str(item.get("id", "")).strip()
+        ]
+        snapshot_entry = snapshot_entries[0] if snapshot_entries else None
 
         if snapshot_entry is None:
             entry = add_memory(
@@ -534,7 +536,10 @@ def apply_harmonize_report(
                 item_id = str(item.get("id", "")).strip()
                 if not item_id:
                     continue
-                if source.startswith("harmonize:") and source != "harmonize:snapshot":
+                if source == "harmonize:snapshot" and item_id != snapshot_id:
+                    if remove_memory(root, item_id):
+                        removed_legacy += 1
+                elif source.startswith("harmonize:") and source != "harmonize:snapshot":
                     if remove_memory(root, item_id):
                         removed_legacy += 1
 
