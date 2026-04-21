@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.7 - 2026-04-21
+
+### Other
+- Add harmonize rollup & contradiction feature
+- Remove pre-built site and update docs
+- Merge branch 'main' of https://github.com/CptPlastic/lore-book
+- Add Automation & CI and JSON CLI options
+
 ## v1.4.6 - 2026-04-11
 
 ### Other
