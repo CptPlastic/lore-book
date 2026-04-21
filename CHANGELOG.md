@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.4.8 - 2026-04-21
+
+- Maintenance release.
+
 ## v1.4.7 - 2026-04-21
 
 ### Other
