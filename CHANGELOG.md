@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.5.0 - 2026-04-21
+
+### Other
+- Merge branch 'main' of https://github.com/CptPlastic/lore-book
+- Add harmonize docs and CLI integration
+- Add harmonize feature and daemon/CLI integration
+
 ## v1.4.8 - 2026-04-21
 
 - Maintenance release.
