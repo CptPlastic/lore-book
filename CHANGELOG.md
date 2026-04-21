@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.5.1 - 2026-04-21
+
+### Fixes
+- Fix README header spacing
+
+### Other
+- Add CHRONICLE importer and harmonize updates
+- Update CHRONICLE with harmonize docs & CLI
+
 ## v1.5.0 - 2026-04-21
 
 ### Other

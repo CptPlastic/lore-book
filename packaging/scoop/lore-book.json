@@ -1,13 +1,13 @@
 {
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "The spellbook for your codebase - chronicle decisions, context, and lessons your AI tools can read.",
   "homepage": "https://github.com/CptPlastic/lore-book",
   "license": "FSL-1.1-MIT",
   "depends": "python",
   "architecture": {
     "64bit": {
-      "url": "https://files.pythonhosted.org/packages/source/l/lore_book/lore_book-1.5.0.tar.gz",
-      "hash": "e92215c194896d05d5aaab8bba3a0adcdbcd8499e8d4349e7bd9fe231217934a"
+      "url": "https://files.pythonhosted.org/packages/source/l/lore_book/lore_book-1.5.1.tar.gz",
+      "hash": "601cdc2d8872b01248d09eeec7ef6a76b9fd656a83ee109ad5c9e4109487a08c"
     }
   },
   "checkver": "https://pypi.org/pypi/lore-book/json",
